@@ -93,6 +93,7 @@
    <div class="grid2">
     <div><label>Room Width (ft)</label><input type="number" id="roomW" value="12" step="0.5"></div>
     <div><label>Room Ceiling Height (ft)</label><input type="number" id="roomH" value="7.5" step="0.25"></div>
+    <div><label>Attic Floor Live Load (psf)</label><input type="number" id="roomLL" value="30"><div class="hint">IRC Table R301.5: 30 sleeping / 40 living</div></div>
    </div>
   </div>
   <div class="grid2">
@@ -131,6 +132,8 @@
   <div id="check"></div>
  </div>
  </div>
+ <h2>Joint Forces &amp; Connection Demands</h2>
+ <div id="joints"></div>
  <div class="note"><b>PRELIMINARY ONLY.</b> Geometry, takeoff and member check are for budgeting/conceptual layout. Final truss design, member sizes, plates, bracing and uplift connections are by the truss manufacturer (sealed truss design drawings per IRC R802.10 / IBC 2303.4) and the Engineer of Record. Reference design values per NDS Supplement 2018 Table 4A/4B (SYP 4B). Analysis is simplified: top-chord heel compression from joint equilibrium, panel bending w·L²/10, in-plane buckling l<sub>e</sub>=0.8×panel length (continuous chord), sheathing braces weak axis. Wind auto value: q<sub>h</sub>=0.00256·K<sub>z</sub>(B 0.57 / C 0.85 / D 1.03 at h ≤ 15 ft)·K<sub>d</sub>(0.85)·V², net uplift coeff. ≈1.18 (interior zone, enclosed) – verify per ASCE 7-22 Ch. 30.</div>
 </div>
 <script>
@@ -171,7 +174,7 @@ function geometry(t, S, p, q, heel, roomW, roomH) {
   m.push(['A2', 'P', 'TC', 'Top chord'], ['A', 'E', 'BC', 'Bottom chord'], ['E', 'P', 'W', 'End vertical'],
    ['B1', 'T1', 'W', 'Vertical V1'], ['B1', 'T2', 'W', 'Diagonal D1'], ['B2', 'T2', 'W', 'Vertical V2'], ['B2', 'P', 'W', 'Diagonal D2']);
   if (heel > 0) m.push(['A', 'A2', 'W', 'Heel vertical']);
-  return { n, m, peakTop, ceilPeak, tcPanel: Math.hypot(S / 3, tp * S / 3), heelNode: 'A2' };
+  return { n, m, peakTop, ceilPeak, tcPanel: Math.hypot(S / 3, tp * S / 3), heelNode: 'A2', heel };
  }
  peakTop = heel + tp * H;
  add('A', 0, 0); add('E', S, 0); add('AL', 0, heel); add('AR', S, heel); add('P', H, peakTop);
@@ -201,7 +204,7 @@ function geometry(t, S, p, q, heel, roomW, roomH) {
    tcPanel = Math.hypot(S / 3, tp * S / 3);
   } else if (t === 'attic') {
    const xw = (S - roomW) / 2;
-   const xc = Math.min(H, Math.max(xw, (peakTop - roomH) / tp)); // where ceiling meets top chord (left)
+   const xc = Math.min(H, Math.max(xw, (roomH - heel) / tp)); // where ceiling meets top chord (left)
    add('KL', xw, 0); add('KR', S - xw, 0); add('KTL', xw, top(xw)); add('KTR', S - xw, top(xw));
    add('CL', xc, roomH); add('CR', S - xc, roomH);
    m.push(['KL', 'KTL', 'W', 'Knee wall L'], ['KR', 'KTR', 'W', 'Knee wall R'], ['CL', 'CR', 'W', 'Attic ceiling joist'], ['A', 'KTL', 'W', 'Diagonal L'], ['E', 'KTR', 'W', 'Diagonal R']);
@@ -209,10 +212,110 @@ function geometry(t, S, p, q, heel, roomW, roomH) {
    atticInfo = { kneeH: top(xw), roomW, roomH, fits: roomH <= top(xw) + 0 || xc > xw, xc, ok: roomH < peakTop && xw > 0 };
   }
  }
- return { n, m, peakTop, ceilPeak, tcPanel, atticInfo, heelNode: 'AL' };
+ return { n, m, peakTop, ceilPeak, tcPanel, atticInfo, heelNode: 'AL', heel };
 }
 
 const KZ = { B: 0.57, C: 0.85, D: 1.03 };
+// ===== Joint analysis: 2D frame stiffness — chords continuous (beam elements), webs pin-ended (axial only) =====
+function buildModel(g, S, ov, ang, t) {
+ const keys = Object.keys(g.n), id = {}, nodes = [];
+ const tol = 1e-6;
+ keys.forEach(k => { const p = g.n[k]; let j = nodes.findIndex(q => Math.abs(q.x - p.x) < 1e-6 && Math.abs(q.y - p.y) < 1e-6); if (j < 0) { j = nodes.length; nodes.push({ x: p.x, y: p.y, keys: [] }); } nodes[j].keys.push(k); id[k] = j; });
+ let mem = [];
+ g.m.forEach(([a, b, ty, lab]) => { const i = id[a], j = id[b]; if (i === j) return; mem.push({ i, j, ty, lab }); });
+ // overhang tip nodes
+ const hl = id[g.heelNode]; const dy = ov * Math.tan(ang);
+ if (ov > 0) {
+  nodes.push({ x: nodes[hl].x - ov, y: nodes[hl].y - dy, keys: ['OL'] }); mem.push({ i: nodes.length - 1, j: hl, ty: 'TC', lab: 'Overhang L' });
+  if (t !== 'mono') { const hr = id.AR; nodes.push({ x: nodes[hr].x + ov, y: nodes[hr].y - dy, keys: ['OR'] }); mem.push({ i: hr, j: nodes.length - 1, ty: 'TC', lab: 'Overhang R' }); }
+ }
+ // raised heel: add heel web from top of heel to first interior bottom-chord node (typical energy-heel layout)
+ if (g.heel > 0) [[id.A, id[g.heelNode], 1], [id.E, id.AR, -1]].forEach(([bi, ti, dir]) => { if (bi === undefined || ti === undefined) return;
+  let best = -1, bd = 1e9; nodes.forEach((n, k) => { const dx = (n.x - nodes[bi].x) * dir; if (Math.abs(n.y) < 1e-6 && dx > 1e-6 && dx < bd) { bd = dx; best = k; } });
+  if (best >= 0 && !mem.some(m => (m.i === ti && m.j === best) || (m.j === ti && m.i === best))) mem.push({ i: ti, j: best, ty: 'W', lab: 'Heel diagonal' + (dir > 0 ? ' L' : ' R') }); });
+ // split members at intermediate collinear nodes
+ let changed = true;
+ while (changed) { changed = false; for (let mi = 0; mi < mem.length; mi++) { const m = mem[mi], A = nodes[m.i], B = nodes[m.j], L = Math.hypot(B.x - A.x, B.y - A.y);
+  for (let k = 0; k < nodes.length; k++) { if (k === m.i || k === m.j) continue; const P = nodes[k];
+   const s = ((P.x - A.x) * (B.x - A.x) + (P.y - A.y) * (B.y - A.y)) / (L * L); const cr = Math.abs((B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x)) / L;
+   if (s > 1e-6 && s < 1 - 1e-6 && cr < 1e-6) { mem.splice(mi, 1, { ...m, j: k }, { ...m, i: k }); changed = true; break; } }
+  if (changed) break; } }
+ // drop duplicate members
+ const seen = new Set(); mem = mem.filter(m => { const k = Math.min(m.i, m.j) + '-' + Math.max(m.i, m.j); if (seen.has(k)) return false; seen.add(k); return true; });
+ // label joints J1.. sorted left-to-right, bottom-to-top
+ const order = nodes.map((n, k) => k).sort((a, b) => nodes[a].x - nodes[b].x || nodes[a].y - nodes[b].y);
+ order.forEach((k, r) => nodes[k].lab = 'J' + (r + 1));
+ const ia = id.A, ie = id.E;
+ return { nodes, mem, ia, ie };
+}
+function solveLin(K, F) { const n = F.length, A = K.map((r, i) => [...r, F[i]]);
+ for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]];
+  if (Math.abs(A[c][c]) < 1e-12) return null; for (let r = 0; r < n; r++) if (r !== c) { const f = A[r][c] / A[c][c]; if (f) for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; } }
+ return A.map((r, i) => r[n] / r[i]); }
+function analyze(model, props, loadsTop, loadsBot, pinPin, floor) {
+ const { nodes, mem, ia, ie } = model, nd = nodes.length * 3;
+ const K = Array.from({ length: nd }, () => new Array(nd).fill(0)), F = new Array(nd).fill(0);
+ const els = mem.map(m => {
+  const A = nodes[m.i], B = nodes[m.j], Lft = Math.hypot(B.x - A.x, B.y - A.y), L = Lft * 12, c = (B.x - A.x) / Lft, s = (B.y - A.y) / Lft;
+  const fr = m.ty !== 'W' || /Knee wall|ceiling joist/.test(m.lab); const p = fr ? props.chord : props.web, E = props.E, EA = E * p.A, EI = fr ? E * p.I : 0;
+  const kl = Array.from({ length: 6 }, () => new Array(6).fill(0));
+  kl[0][0] = kl[3][3] = EA / L; kl[0][3] = kl[3][0] = -EA / L;
+  if (EI) { const a = 12 * EI / L ** 3, b = 6 * EI / L ** 2, d = 4 * EI / L, e = 2 * EI / L;
+   [[1, 1, a], [1, 2, b], [1, 4, -a], [1, 5, b], [2, 2, d], [2, 4, -b], [2, 5, e], [4, 4, a], [4, 5, -b], [5, 5, d]].forEach(([r, q, v]) => { kl[r][q] = v; kl[q][r] = v; }); }
+  const T = Array.from({ length: 6 }, () => new Array(6).fill(0));
+  [0, 3].forEach(o => { T[o][o] = c; T[o][o + 1] = s; T[o + 1][o] = -s; T[o + 1][o + 1] = c; T[o + 2][o + 2] = 1; });
+  const dof = [m.i * 3, m.i * 3 + 1, m.i * 3 + 2, m.j * 3, m.j * 3 + 1, m.j * 3 + 2];
+  const kg = Array.from({ length: 6 }, (_, r) => Array.from({ length: 6 }, (_, q) => { let v = 0; for (let x = 0; x < 6; x++) for (let y = 0; y < 6; y++) v += T[x][r] * kl[x][y] * T[y][q]; return v; }));
+  for (let r = 0; r < 6; r++) for (let q = 0; q < 6; q++) K[dof[r]][dof[q]] += kg[r][q];
+  // panel-point loads (lb): w (psf×spacing, plf on horizontal projection) lumped half to each end
+  const dx = Math.abs(B.x - A.x), w = m.ty === 'TC' ? loadsTop : m.ty === 'BC' ? loadsBot : 0;
+  let wf = w; if (floor && m.ty === 'BC' && Math.min(A.x, B.x) >= floor.x1 - 1e-6 && Math.max(A.x, B.x) <= floor.x2 + 1e-6) wf += floor.w;
+  F[dof[1]] -= wf * dx / 2; F[dof[4]] -= wf * dx / 2;
+  return { m, kl, T, dof, Lft };
+ });
+ const Fapp = F.slice();
+ for (let k = 0; k < nodes.length; k++) K[k * 3 + 2][k * 3 + 2] += 1e-3; // tiny rotational spring (pin-only nodes)
+ const fixed = [ia * 3, ia * 3 + 1, ie * 3 + 1]; if (pinPin) fixed.push(ie * 3);
+ const free = [...Array(nd).keys()].filter(d => !fixed.includes(d));
+ const u0 = solveLin(free.map(r => free.map(q => K[r][q])), free.map(r => F[r])); if (!u0) return null;
+ const u = new Array(nd).fill(0); free.forEach((d, k) => u[d] = u0[k]);
+ const R = new Array(nd).fill(0); for (let r = 0; r < nd; r++) { let v = 0; for (let q = 0; q < nd; q++) v += K[r][q] * u[q]; R[r] = v - Fapp[r]; }
+ const resid = []; // joint equilibrium from element end forces
+ const endF = new Array(nd).fill(0);
+ els.forEach(e => { const ug = e.dof.map(d => u[d]), ul = [0, 1, 2, 3, 4, 5].map(r => e.T[r].reduce((a, v, q) => a + v * ug[q], 0));
+  const fl = e.kl.map(row => row.reduce((a, v, q) => a + v * ul[q], 0)); e.N = -fl[0]; // + tension
+  e.M = Math.max(Math.abs(fl[2]), Math.abs(fl[5])) / 12; // ft-lb
+  const fg = [0, 1, 2, 3, 4, 5].map(r => [0, 1, 2, 3, 4, 5].reduce((a, q) => a + e.T[q][r] * fl[q], 0)); e.dof.forEach((d, k) => endF[d] += fg[k]); });
+ let maxRes = 0; nodes.forEach((n, k) => { for (const o of [0, 1]) { const d = k * 3 + o; const r = fixed.includes(d) ? 0 : endF[d] - Fapp[d]; maxRes = Math.max(maxRes, Math.abs(r)); } });
+ return { els, R, u, maxRes, sumFy: Fapp.reduce((a, v, d) => a + (d % 3 === 1 ? v : 0), 0), ia, ie };
+}
+
+const SST = q => `https://www.strongtie.com/search?q=${encodeURIComponent(q)}`, MTK = q => `https://www.mitek-us.com/?s=${encodeURIComponent(q)}`;
+const lk = (q1, q2) => `<a href="${SST(q1)}" target="_blank" rel="noopener">Simpson</a> · <a href="${MTK(q2)}" target="_blank" rel="noopener">MiTek</a>`;
+function jointOutput(model, props, wtG, wbG, wtW, wbW, gName, floor) {
+ const G = analyze(model, props, wtG, wbG, false, floor), Wd = analyze(model, props, wtW, wbW, false), GP = analyze(model, props, wtG, wbG, true, floor);
+ window._truss = { G, Wd, GP, model };
+ if (!G || !Wd || !GP) { $('joints').innerHTML = '<div class="err">Structure is unstable for this geometry – check inputs.</div>'; return; }
+ const { nodes } = model, fmt = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(0);
+ let h = `<div class="hint">Frame/pin model: chords continuous, webs pin-ended; left bearing pinned, right bearing on slide (roller). Panel-point loads: top chord ${gName} = ${wtG.toFixed(1)} plf, BC ${wbG.toFixed(1)} plf; wind 0.6D+0.6W top = ${wtW.toFixed(1)} plf (uplift applied vertically on plan, approx.), BC ${wbW.toFixed(1)} plf. ${floor ? `Attic floor live load ${floor.w.toFixed(1)} plf on BC between knee walls (gravity case). Knee walls &amp; ceiling joist modelled as frame members. ` : ''}Forces in lb: <b>+ tension / − compression</b>. Equilibrium check: max joint residual ${Math.max(G.maxRes, Wd.maxRes).toExponential(1)} lb; ΣR<sub>y</sub> = ${(G.R[G.ia * 3 + 1] + G.R[G.ie * 3 + 1]).toFixed(0)} lb vs applied ${(-G.sumFy).toFixed(0)} lb.</div>`;
+ h += `<table><tr><th>Joint</th><th>x, y (ft)</th><th>Members (${gName} / 0.6D+0.6W)</th><th>Max web force at joint – plate/connection demand (${gName} / wind)</th><th>Connector lookup</th></tr>`;
+ nodes.map((n, k) => k).sort((a, b) => +nodes[a].lab.slice(1) - +nodes[b].lab.slice(1)).forEach(k => { const n = nodes[k];
+  const at = G.els.map((e, q) => ({ e, w: Wd.els[q] })).filter(o => o.e.m.i === k || o.e.m.j === k);
+  const list = at.map(o => `${o.e.m.lab}: ${fmt(o.e.N)} / ${fmt(o.w.N)}`).join('<br>');
+  const webs = at.filter(o => o.e.m.ty === 'W');
+  const mg = webs.length ? Math.max(...webs.map(o => Math.abs(o.e.N))) : 0, mw = webs.length ? Math.max(...webs.map(o => Math.abs(o.w.N))) : 0;
+  const brg = k === model.ia || k === model.ie;
+  h += `<tr><td><b>${n.lab}</b>${brg ? '<br>(bearing)' : ''}</td><td>${n.x.toFixed(2)}, ${n.y.toFixed(2)}</td><td style="text-align:left;font-size:.8em">${list}</td><td>${webs.length ? mg.toFixed(0) + ' / ' + mw.toFixed(0) + ' lb' : '— (chord splice/heel only)'}</td><td style="font-size:.8em">${brg ? 'Heel: see below' : 'Truss plate: ' + lk('truss plate', 'truss plate')}</td></tr>`;
+ });
+ h += '</table>';
+ const side = (k, nm) => { const Rg = G.R[k * 3 + 1], Rw = Wd.R[k * 3 + 1], Hx = GP.R[k * 3];
+  return `<tr><td><b>${nodes[k].lab}</b> ${nm}</td><td>${Rg.toFixed(0)} lb ↓</td><td>${Rw < 0 ? (-Rw).toFixed(0) + ' lb ↑' : 'none (' + Rw.toFixed(0) + ' lb ↓)'}</td><td>${Math.abs(Hx).toFixed(0)} lb</td><td style="font-size:.8em">Uplift tie (e.g. H2.5A / H10A class): ${lk('hurricane tie', 'hurricane tie')}<br>Girder hanger (if supported by girder): ${lk('truss hanger', 'truss hanger')}</td></tr>`; };
+ const dxR = Math.abs(G.u[model.ie * 3]);
+ h += `<h3 style="font-size:1em;color:#0066cc">Heel / Bearing Demands (per truss)</h3><table><tr><th>Bearing</th><th>Gravity reaction (${gName}) = download / hanger demand</th><th>Net uplift (0.6D+0.6W)</th><th>Lateral thrust if both bearings restrained (${gName})</th><th>Connector lookup</th></tr>${side(model.ia, '(left)')}${side(model.ie, '(right)')}</table>`;
+ h += `<div class="hint">Horizontal slide at right bearing with pin/roller supports (${gName}, E=${(props.E / 1e6).toFixed(1)}M, gross sections): <b>${dxR.toFixed(3)} in</b>${dxR > 0.75 ? ' – <b>large: scissor/vault trusses may need slotted/slide bearing connectors or the walls must resist the thrust</b>' : ''}. With roller support the design thrust is 0; the "both restrained" thrust is what the walls/connection would see if the heel is fixed against sliding.</div>`;
+ h += `<div class="warn"><b>Demand only.</b> Select each connector so its allowable load (with the appropriate load-duration factor, e.g. C<sub>D</sub>=1.6 for wind uplift, 1.0/1.15/1.25 for gravity) is ≥ the demand, per the manufacturer's current catalog (Simpson Strong-Tie / MiTek). No allowable values are built into this tool. Metal plate connectors (truss plates) are designed by the truss manufacturer. Uplift in the wind case is approximate (net uplift from vertical projected pressure); verify with ASCE 7-22 C&amp;C/MWFRS.</div>`;
+ $('joints').innerHTML = h;
+}
 function windAutoPsf(V, ex) { const qh = 0.00256 * KZ[ex] * 1.0 * 0.85 * V * V; return qh * 1.18; }
 
 function calculate() {
@@ -327,11 +430,13 @@ function calculate() {
  </table><div class="hint"><b>Preliminary</b> – simplified hand check for sizing intent only. Final design by truss manufacturer (sealed truss design drawings).</div>`;
  const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
  $('crit').innerHTML = `<div class="k">Site / Design Criteria</div><div style="font-size:.9em"><b>Address:</b> ${esc($('addr').value) || '—'}<br><b>Risk Category:</b> ${$('riskCat').value} &nbsp; <b>Exposure:</b> ${$('expo').value} (K<sub>z</sub>=${KZ[$('expo').value]}) &nbsp; <b>V:</b> ${V} mph &nbsp; <b>Snow:</b> ${sn} psf<br><i>Source: ASCE Hazard Tool (ASCE 7-22), entered manually.</i></div>`;
- drawSVG(g, S, ov, ang, t);
+ const model = buildModel(g, S, ov, ang, t);
+ jointOutput(model, { E: rv.E, chord: { A: b * d, I: b * d ** 3 / 12 }, web: { A: 5.25, I: 0 } }, (tcdl + LL) * sp, bcdl * sp, (0.6 * tcdl - 0.6 * W) * sp, 0.6 * bcdl * sp, LL === sn && sn > lr ? 'D+S' : 'D+Lr', t === 'attic' ? { x1: (S - roomW) / 2, x2: (S + roomW) / 2, w: +$('roomLL').value * sp } : null);
+ drawSVG(g, S, ov, ang, t, model);
  $('pProj').textContent = $('proj').value || '—'; $('pDate').textContent = new Date().toLocaleDateString();
 }
 
-function drawSVG(g, S, ov, ang, t) {
+function drawSVG(g, S, ov, ang, t, model) {
  const W = 560, Hh = 260, pad = 40;
  const ys = Object.values(g.n).map(n => n.y), ymax = Math.max(...ys, 0.01);
  const sc = Math.min((W - 2 * pad) / (S + 2 * ov), (Hh - 90) / ymax);
@@ -364,6 +469,7 @@ function drawSVG(g, S, ov, ang, t) {
  s += `<text x="${X(S * 0.12)}" y="${Y(hn.y) - 6}" font-size="11" fill="#2e8b3d">${(ang * 180 / Math.PI).toFixed(1)}°</text>`;
  const tc = Math.hypot(pk.x - hn.x, pk.y - hn.y) + ov / Math.cos(ang);
  s += `<text x="${X((hn.x + pk.x) / 2) - 60}" y="${Y((hn.y + pk.y) / 2) - 8}" font-size="11" fill="#0066cc">Top chord ${f2(tc)} ft</text>`;
+ if (model) model.nodes.forEach(n => s += `<text x="${X(n.x) + 4}" y="${Y(n.y) + (n.y < 0.05 ? 14 : -5)}" font-size="10" font-weight="bold" fill="#6a1b9a">${n.lab}</text>`);
  $('diagram').innerHTML = `<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse"><path d="M0,1 L7,4 L0,7 z" fill="#333"/></marker></defs>` + s;
 }
 
