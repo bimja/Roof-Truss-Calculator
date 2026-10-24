@@ -55,6 +55,12 @@
  <div class="layout">
  <div class="no-print" id="inputs">
   <label>Project / Description</label><input id="proj" value="">
+  <h2>Site / Design Criteria</h2>
+  <label>Project Address</label><input id="addr" value="" placeholder="Street, City, TX ZIP">
+  <div class="grid2">
+   <div><label>Risk Category</label><select id="riskCat"><option>I</option><option selected>II</option><option>III</option><option>IV</option></select><div class="hint">Select the same category in the Hazard Tool; it sets V</div></div>
+   <div><label>Exposure Category</label><select id="expo"><option>B</option><option selected>C</option><option>D</option></select><div class="hint">Sets K<sub>z</sub> for auto wind pressure (h ≤ 15 ft)</div></div>
+  </div>
   <div class="grid2">
    <div><label>Roof Span</label><div class="uin"><input type="number" id="span" value="30" step="0.1"><select id="spanU"><option>ft</option><option>in</option><option>m</option></select></div><div class="hint">Out-to-out of bearing walls</div></div>
    <div><label>Building Length</label><div class="uin"><input type="number" id="blen" value="40" step="0.1"><select id="blenU"><option>ft</option><option>in</option><option>m</option></select></div><div class="hint">Length along the ridge</div></div>
@@ -101,10 +107,10 @@
   <h2>Loads (psf)</h2>
   <div class="grid2">
    <div><label>Roof Live Load Lr</label><input type="number" id="lr" value="20"></div>
-   <div><label>Snow Load (ground/roof)</label><input type="number" id="snow" value="0"></div>
+   <div><label>Snow Load (ground/roof) <a href="https://ascehazardtool.org/" target="_blank" rel="noopener" style="font-size:.8em;font-weight:normal">Look up in ASCE Hazard Tool ↗</a></label><input type="number" id="snow" value="0"></div>
    <div><label>Top Chord Dead (TCDL)</label><input type="number" id="tcdl" value="10"></div>
    <div><label>Bottom Chord Dead (BCDL)</label><input type="number" id="bcdl" value="10"></div>
-   <div><label>Basic Wind Speed V (mph)</label><input type="number" id="vwind" value="143"><div class="hint">ASCE 7-22 Risk Cat II; Gulf Coast ≈ 140–150</div></div>
+   <div><label>Basic Wind Speed V (mph) <a href="https://ascehazardtool.org/" target="_blank" rel="noopener" style="font-size:.8em;font-weight:normal">Look up in ASCE Hazard Tool ↗</a></label><input type="number" id="vwind" value="143"><div class="hint">From ASCE Hazard Tool for the Risk Category above</div></div>
    <div><label>Wind Uplift Pressure (psf) <input type="checkbox" id="windAuto" checked> auto</label><input type="number" id="wind" value="15"><div class="hint" id="windHint">Auto = qh×(GCp−GCpi) approx.; uncheck to type</div></div>
    <div><label>Lumber Price ($/bd ft)</label><input type="number" id="price" value="0.85" step="0.01"></div>
    <div><label>Load Duration C<sub>D</sub></label><select id="cd"><option value="1.25">1.25 (roof live / construction)</option><option value="1.15">1.15 (snow)</option><option value="1.0">1.0 (normal)</option></select></div>
@@ -116,6 +122,7 @@
  <div id="out">
   <svg id="diagram" viewBox="0 0 560 260"></svg>
   <div id="msgs"></div>
+  <div id="crit" class="card" style="margin:8px 0"></div>
   <h2>Results</h2>
   <div class="cards" id="cards"></div>
   <h2>Member Lengths (per truss)</h2>
@@ -124,7 +131,7 @@
   <div id="check"></div>
  </div>
  </div>
- <div class="note"><b>PRELIMINARY ONLY.</b> Geometry, takeoff and member check are for budgeting/conceptual layout. Final truss design, member sizes, plates, bracing and uplift connections are by the truss manufacturer (sealed truss design drawings per IRC R802.10 / IBC 2303.4) and the Engineer of Record. Reference design values per NDS Supplement 2018 Table 4A/4B (SYP 4B). Analysis is simplified: top-chord heel compression from joint equilibrium, panel bending w·L²/10, in-plane buckling l<sub>e</sub>=0.8×panel length (continuous chord), sheathing braces weak axis. Wind auto value: q<sub>h</sub>=0.00256·K<sub>z</sub>(0.85, Exp C)·K<sub>d</sub>(0.85)·V², net uplift coeff. ≈1.18 (interior zone, enclosed) – verify per ASCE 7-22 Ch. 30.</div>
+ <div class="note"><b>PRELIMINARY ONLY.</b> Geometry, takeoff and member check are for budgeting/conceptual layout. Final truss design, member sizes, plates, bracing and uplift connections are by the truss manufacturer (sealed truss design drawings per IRC R802.10 / IBC 2303.4) and the Engineer of Record. Reference design values per NDS Supplement 2018 Table 4A/4B (SYP 4B). Analysis is simplified: top-chord heel compression from joint equilibrium, panel bending w·L²/10, in-plane buckling l<sub>e</sub>=0.8×panel length (continuous chord), sheathing braces weak axis. Wind auto value: q<sub>h</sub>=0.00256·K<sub>z</sub>(B 0.57 / C 0.85 / D 1.03 at h ≤ 15 ft)·K<sub>d</sub>(0.85)·V², net uplift coeff. ≈1.18 (interior zone, enclosed) – verify per ASCE 7-22 Ch. 30.</div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -205,7 +212,8 @@ function geometry(t, S, p, q, heel, roomW, roomH) {
  return { n, m, peakTop, ceilPeak, tcPanel, atticInfo, heelNode: 'AL' };
 }
 
-function windAutoPsf(V) { const qh = 0.00256 * 0.85 * 1.0 * 0.85 * V * V; return qh * 1.18; }
+const KZ = { B: 0.57, C: 0.85, D: 1.03 };
+function windAutoPsf(V, ex) { const qh = 0.00256 * KZ[ex] * 1.0 * 0.85 * V * V; return qh * 1.18; }
 
 function calculate() {
  const msgs = [];
@@ -248,7 +256,7 @@ function calculate() {
  const lr = +$('lr').value, sn = +$('snow').value, tcdl = +$('tcdl').value, bcdl = +$('bcdl').value;
  const LL = Math.max(lr, sn), DL = tcdl + bcdl;
  const V = +$('vwind').value;
- if ($('windAuto').checked) { $('wind').value = windAutoPsf(V).toFixed(1); $('wind').readOnly = true; } else $('wind').readOnly = false;
+ if ($('windAuto').checked) { $('wind').value = windAutoPsf(V, $('expo').value).toFixed(1); $('wind').readOnly = true; } else $('wind').readOnly = false;
  const W = +$('wind').value;
  const totalLoad = (DL + LL) * planArea;
  const lumberBF = bf * count, cost = lumberBF * +$('price').value;
@@ -317,6 +325,8 @@ function calculate() {
  <tr class="${cls(interOk)}"><td>Combined (NDS Eq. 3.9-3)</td><td>${isFinite(inter) ? inter.toFixed(2) : 'f<sub>c</sub> ≥ F<sub>cE</sub>'}</td><td><b>${tag(interOk)}</b> (≤ 1.00)</td></tr>
  <tr class="${cls(ftOK)}"><td>Bottom chord tension at heel</td><td>${T.toFixed(0)} lb</td><td>f<sub>t</sub>=${ft.toFixed(0)} / F′<sub>t</sub>=${Ftp.toFixed(0)} psi – <b>${tag(ftOK)}</b> (net section/plates by mfr)</td></tr>
  </table><div class="hint"><b>Preliminary</b> – simplified hand check for sizing intent only. Final design by truss manufacturer (sealed truss design drawings).</div>`;
+ const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+ $('crit').innerHTML = `<div class="k">Site / Design Criteria</div><div style="font-size:.9em"><b>Address:</b> ${esc($('addr').value) || '—'}<br><b>Risk Category:</b> ${$('riskCat').value} &nbsp; <b>Exposure:</b> ${$('expo').value} (K<sub>z</sub>=${KZ[$('expo').value]}) &nbsp; <b>V:</b> ${V} mph &nbsp; <b>Snow:</b> ${sn} psf<br><i>Source: ASCE Hazard Tool (ASCE 7-22), entered manually.</i></div>`;
  drawSVG(g, S, ov, ang, t);
  $('pProj').textContent = $('proj').value || '—'; $('pDate').textContent = new Date().toLocaleDateString();
 }
