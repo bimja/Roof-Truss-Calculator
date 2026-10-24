@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roof Truss Calculator (incl. Vaulted / Scissor)</title>
+<style>
+ body { font-family: Arial, sans-serif; margin: 20px; background: #f0f8ff; color: #333; }
+ h1 { color: #0066cc; text-align: center; margin-bottom: 4px; }
+ .container { max-width: 1150px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+ .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+ label { display: block; margin: 8px 0 4px; font-weight: bold; }
+ input, select { width: 100%; padding: 7px; margin-bottom: 4px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+ input[type=checkbox], input[type=radio] { width: auto; }
+ .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+ .uin { display: grid; grid-template-columns: 1fr 70px; gap: 6px; }
+ .hint { font-size: 0.8em; color: #666; margin-bottom: 6px; }
+ button { background: #0066cc; color: white; padding: 10px 16px; border: none; border-radius: 5px; font-size: 1em; cursor: pointer; margin: 4px 4px 4px 0; }
+ button.sec { background: white; color: #0066cc; border: 1px solid #0066cc; }
+ button:hover { opacity: .9; }
+ .toggle button { padding: 5px 10px; font-size: .85em; }
+ .toggle button.off { background: #e6f0ff; color: #0066cc; }
+ h2 { color: #0066cc; font-size: 1.15em; border-bottom: 1px solid #cde; padding-bottom: 4px; }
+ .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+ .card { background: #e6f0ff; border-radius: 8px; padding: 8px 10px; }
+ .card .k { font-size: .72em; text-transform: uppercase; color: #557; }
+ .card .v { font-size: 1.15em; font-weight: bold; }
+ table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+ th, td { border: 1px solid #0066cc; padding: 5px; text-align: center; font-size: .88em; }
+ th { background: #0066cc; color: white; }
+ .ok { background: #dcf5dc; } .fail { background: #ffd6d6; font-weight: bold; } .amber { background: #ffe7b3; }
+ .warn { background: #ffe7b3; border: 1px solid #e69500; padding: 8px; border-radius: 6px; margin: 8px 0; font-size: .9em; }
+ .err { background: #ffd6d6; border: 1px solid #c62828; padding: 8px; border-radius: 6px; margin: 8px 0; font-size: .9em; }
+ .note { font-size: 0.85em; color: #555; margin-top: 16px; border-top: 1px solid #ccc; padding-top: 8px; }
+ #diagram { width: 100%; background: #fafcff; border: 1px solid #cde; border-radius: 8px; }
+ .conditional { display: none; }
+ .printhdr { display: none; }
+ @media print {
+  body { background: white; margin: 0; }
+  .container { box-shadow: none; max-width: none; padding: 0; }
+  .no-print { display: none !important; }
+  .layout { display: block; }
+  .printhdr { display: block; }
+  .card { border: 1px solid #999; background: white !important; }
+  th { background: #ddd !important; color: black; }
+  tr { page-break-inside: avoid; }
+ }
+</style>
+</head>
+<body>
+<div class="container">
+ <h1>🏠 Roof Truss Calculator</h1>
+ <p style="text-align:center;font-style:italic;margin-top:0">MDI &amp; Associates • Preliminary geometry, takeoff &amp; top-chord check • Gulf Coast TX defaults • incl. Vaulted Ceiling (Scissor) truss</p>
+ <div class="printhdr"><b>Project:</b> <span id="pProj"></span> &nbsp; <b>Date:</b> <span id="pDate"></span></div>
+ <div class="layout">
+ <div class="no-print" id="inputs">
+  <label>Project / Description</label><input id="proj" value="">
+  <h2>Site / Design Criteria</h2>
+  <label>Project Address</label><input id="addr" value="" placeholder="Street, City, TX ZIP">
+  <div class="grid2">
+   <div><label>Risk Category</label><select id="riskCat"><option>I</option><option selected>II</option><option>III</option><option>IV</option></select><div class="hint">Select the same category in the Hazard Tool; it sets V</div></div>
+   <div><label>Exposure Category</label><select id="expo"><option>B</option><option selected>C</option><option>D</option></select><div class="hint">Sets K<sub>z</sub> for auto wind pressure (h ≤ 15 ft)</div></div>
+  </div>
+  <div class="grid2">
+   <div><label>Roof Span</label><div class="uin"><input type="number" id="span" value="30" step="0.1"><select id="spanU"><option>ft</option><option>in</option><option>m</option></select></div><div class="hint">Out-to-out of bearing walls</div></div>
+   <div><label>Building Length</label><div class="uin"><input type="number" id="blen" value="40" step="0.1"><select id="blenU"><option>ft</option><option>in</option><option>m</option></select></div><div class="hint">Length along the ridge</div></div>
+  </div>
+  <label>Truss Type</label>
+  <select id="ttype">
+   <option value="fink">Common / Fink (W) – gable</option>
+   <option value="howe">Howe</option>
+   <option value="king">King Post</option>
+   <option value="queen">Queen Post</option>
+   <option value="attic">Attic (room-in-attic)</option>
+   <option value="mono">Mono (single slope)</option>
+   <option value="scissor">Vaulted Ceiling (Scissor)</option>
+  </select>
+  <div class="grid2">
+   <div><label><span id="pitchLbl">Roof Pitch</span></label>
+    <div class="toggle"><button id="tRatio" type="button">Ratio (X/12)</button><button id="tAngle" type="button" class="off">Angle (°)</button></div>
+    <input type="number" id="pitch" value="6" step="0.25"><div class="hint" id="pitchHint">Rise per 12" of run</div></div>
+   <div><label>Overhang</label><div class="uin"><input type="number" id="ovh" value="12" step="1"><select id="ovhU"><option>in</option><option>ft</option><option>m</option></select></div><div class="hint">Eave overhang beyond wall (also used at gable ends)</div></div>
+  </div>
+  <div id="scissorBox" class="conditional" style="background:#fffbe9;border:1px solid #e0c870;border-radius:6px;padding:6px 10px;margin:6px 0">
+   <b>Vaulted ceiling (scissor)</b>
+   <div class="grid2">
+    <div><label>Bottom Chord (Ceiling) Pitch (X/12)</label><input type="number" id="bpitch" value="3" step="0.25"><div class="hint">Rule of thumb: ≤ ½ of top pitch</div></div>
+    <div><label>Wall Plate Height (ft)</label><input type="number" id="wallH" value="9" step="0.25"><div class="hint">Floor to top of plate, for clear height</div></div>
+   </div>
+  </div>
+  <div id="atticBox" class="conditional" style="background:#fffbe9;border:1px solid #e0c870;border-radius:6px;padding:6px 10px;margin:6px 0">
+   <b>Attic room</b>
+   <div class="grid2">
+    <div><label>Room Width (ft)</label><input type="number" id="roomW" value="12" step="0.5"></div>
+    <div><label>Room Ceiling Height (ft)</label><input type="number" id="roomH" value="7.5" step="0.25"></div>
+    <div><label>Attic Floor Live Load (psf)</label><input type="number" id="roomLL" value="30"><div class="hint">IRC Table R301.5: 30 sleeping / 40 living</div></div>
+   </div>
+  </div>
+  <div class="grid2">
+   <div><label>Heel Height (in)</label><input type="number" id="heel" value="0" step="0.5"><div class="hint">Vertical depth at bearing (raised/energy heel). 0 = standard</div></div>
+   <div><label>Truss Spacing (in o.c.)</label><select id="spacing"><option>12</option><option>16</option><option selected>24</option></select></div>
+  </div>
+  <div class="grid2">
+   <div><label>Chord Lumber</label>
+    <select id="species"><option value="SYP">Southern Yellow Pine (SYP)</option><option value="SPF">Spruce-Pine-Fir (SPF)</option><option value="DF">Douglas Fir-Larch (DF-L)</option><option value="HF">Hem-Fir (HF)</option></select></div>
+   <div><label>Grade / Size</label><div class="grid2" style="gap:0 6px"><select id="grade"><option value="No2">No. 2</option><option value="No1">No. 1</option></select><select id="size"><option value="2x4">2×4</option><option value="2x6">2×6</option><option value="2x8">2×8</option></select></div><div class="hint">Webs taken as 2×4 same species</div></div>
+  </div>
+  <h2>Loads (psf)</h2>
+  <div class="grid2">
+   <div><label>Roof Live Load Lr</label><input type="number" id="lr" value="20"></div>
+   <div><label>Snow Load (ground/roof) <a href="https://ascehazardtool.org/" target="_blank" rel="noopener" style="font-size:.8em;font-weight:normal">Look up in ASCE Hazard Tool ↗</a></label><input type="number" id="snow" value="0"></div>
+   <div><label>Top Chord Dead (TCDL)</label><input type="number" id="tcdl" value="10"></div>
+   <div><label>Bottom Chord Dead (BCDL)</label><input type="number" id="bcdl" value="10"></div>
+   <div><label>Basic Wind Speed V (mph) <a href="https://ascehazardtool.org/" target="_blank" rel="noopener" style="font-size:.8em;font-weight:normal">Look up in ASCE Hazard Tool ↗</a></label><input type="number" id="vwind" value="143"><div class="hint">From ASCE Hazard Tool for the Risk Category above</div></div>
+   <div><label>Wind Uplift Pressure (psf) <input type="checkbox" id="windAuto" checked> auto</label><input type="number" id="wind" value="15"><div class="hint" id="windHint">Auto = qh×(GCp−GCpi) approx.; uncheck to type</div></div>
+   <div><label>Lumber Price ($/bd ft)</label><input type="number" id="price" value="0.85" step="0.01"></div>
+   <div><label>Load Duration C<sub>D</sub></label><select id="cd"><option value="1.25">1.25 (roof live / construction)</option><option value="1.15">1.15 (snow)</option><option value="1.0">1.0 (normal)</option></select></div>
+  </div>
+  <div style="margin-top:12px">
+   <button id="calc" type="button">🧮 Calculate</button><button class="sec" id="reset" type="button">↺ Reset</button><button class="sec" id="pdf" type="button">📄 Export PDF</button><button class="sec" id="print" type="button">🖨 Print</button>
+  </div>
+ </div>
+ <div id="out">
+  <svg id="diagram" viewBox="0 0 560 260"></svg>
+  <div id="msgs"></div>
+  <div id="crit" class="card" style="margin:8px 0"></div>
+  <h2>Results</h2>
+  <div class="cards" id="cards"></div>
+  <h2>Member Lengths (per truss)</h2>
+  <table id="members"></table>
+  <h2>Preliminary Top Chord Check (NDS 2018)</h2>
+  <div id="check"></div>
+ </div>
+ </div>
+ <h2>Joint Forces &amp; Connection Demands</h2>
+ <div id="joints"></div>
+ <div class="note"><b>PRELIMINARY ONLY.</b> Geometry, takeoff and member check are for budgeting/conceptual layout. Final truss design, member sizes, plates, bracing and uplift connections are by the truss manufacturer (sealed truss design drawings per IRC R802.10 / IBC 2303.4) and the Engineer of Record. Reference design values per NDS Supplement 2018 Table 4A/4B (SYP 4B). Analysis is simplified: top-chord heel compression from joint equilibrium, panel bending w·L²/10, in-plane buckling l<sub>e</sub>=0.8×panel length (continuous chord), sheathing braces weak axis. Wind auto value: q<sub>h</sub>=0.00256·K<sub>z</sub>(B 0.57 / C 0.85 / D 1.03 at h ≤ 15 ft)·K<sub>d</sub>(0.85)·V², net uplift coeff. ≈1.18 (interior zone, enclosed) – verify per ASCE 7-22 Ch. 30.</div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const DEFAULTS = {};
+document.querySelectorAll('#inputs input, #inputs select').forEach(e => DEFAULTS[e.id] = e.type === 'checkbox' ? e.checked : e.value);
+let angleMode = false;
+const toFt = (v, u) => u === 'in' ? v / 12 : u === 'm' ? v * 3.28084 : v;
+const f2 = x => (isFinite(x) ? x.toFixed(2) : '—');
+function ftin(x) { if (!isFinite(x)) return '—'; const t = Math.round(x * 16 * 12) / 16; let ft = Math.floor(t / 12), inch = t - ft * 12; return `${ft}'-${inch.toFixed(inch % 1 ? 2 : 0).replace(/\.?0+$/, '') || 0}"`; }
+// NDS 2018 Supplement reference values (psi). CF for Table 4A species; SYP Table 4B already size-specific (CF=1, except Fc).
+const NDS = {
+ SPF: { No1: { Fb: 875, Fc: 1150, Ft: 450, E: 1.4e6, Emin: 510000 }, No2: { Fb: 875, Fc: 1150, Ft: 450, E: 1.4e6, Emin: 510000 } },
+ DF:  { No1: { Fb: 1000, Fc: 1500, Ft: 675, E: 1.7e6, Emin: 620000 }, No2: { Fb: 900, Fc: 1350, Ft: 575, E: 1.6e6, Emin: 580000 } },
+ HF:  { No1: { Fb: 975, Fc: 1350, Ft: 625, E: 1.5e6, Emin: 550000 }, No2: { Fb: 850, Fc: 1300, Ft: 525, E: 1.3e6, Emin: 470000 } },
+ SYP: { No1: { '2x4': { Fb: 1350, Fc: 1550, Ft: 875 }, '2x6': { Fb: 1250, Fc: 1500, Ft: 800 }, '2x8': { Fb: 1200, Fc: 1450, Ft: 750 }, E: 1.6e6, Emin: 580000 },
+        No2: { '2x4': { Fb: 1100, Fc: 1450, Ft: 675 }, '2x6': { Fb: 1000, Fc: 1400, Ft: 600 }, '2x8': { Fb: 925, Fc: 1350, Ft: 550 }, E: 1.4e6, Emin: 510000 } }
+};
+const CF = { '2x4': { Fb: 1.5, Fc: 1.15, Ft: 1.5 }, '2x6': { Fb: 1.3, Fc: 1.1, Ft: 1.3 }, '2x8': { Fb: 1.2, Fc: 1.05, Ft: 1.2 } };
+const DIM = { '2x4': [1.5, 3.5], '2x6': [1.5, 5.5], '2x8': [1.5, 7.25] };
+const NOM = { '2x4': [2, 4], '2x6': [2, 6], '2x8': [2, 8] };
+function refVals(sp, gr, sz) {
+ if (sp === 'SYP') { const g = NDS.SYP[gr], s = g[sz]; return { Fb: s.Fb, Fc: s.Fc, Ft: s.Ft, E: g.E, Emin: g.Emin, CFb: 1, CFc: 1, CFt: 1 }; }
+ const g = NDS[sp][gr]; return { ...g, CFb: CF[sz].Fb, CFc: CF[sz].Fc, CFt: CF[sz].Ft };
+}
+function pitchToSlope(v) { return angleMode ? Math.tan(v * Math.PI / 180) * 12 : v; }
+
+// Build truss geometry: nodes {x,y} (ft, y up, origin at left bearing on bottom chord), members [a,b,type,label]
+function geometry(t, S, p, q, heel, roomW, roomH) {
+ const tp = p / 12, H = S / 2, n = {}, m = [];
+ const top = x => heel + tp * Math.min(x, S - x); // gable top chord elevation
+ const add = (k, x, y) => n[k] = { x, y };
+ let peakTop, ceilPeak = 0;
+ if (t === 'mono') {
+  const tm = x => heel + tp * x; peakTop = tm(S);
+  add('A', 0, 0); add('A2', 0, heel); add('E', S, 0); add('P', S, peakTop);
+  add('T1', S / 3, tm(S / 3)); add('T2', 2 * S / 3, tm(2 * S / 3)); add('B1', S / 3, 0); add('B2', 2 * S / 3, 0);
+  m.push(['A2', 'P', 'TC', 'Top chord'], ['A', 'E', 'BC', 'Bottom chord'], ['E', 'P', 'W', 'End vertical'],
+   ['B1', 'T1', 'W', 'Vertical V1'], ['B1', 'T2', 'W', 'Diagonal D1'], ['B2', 'T2', 'W', 'Vertical V2'], ['B2', 'P', 'W', 'Diagonal D2']);
+  if (heel > 0) m.push(['A', 'A2', 'W', 'Heel vertical']);
+  return { n, m, peakTop, ceilPeak, tcPanel: Math.hypot(S / 3, tp * S / 3), heelNode: 'A2', heel };
+ }
+ peakTop = heel + tp * H;
+ add('A', 0, 0); add('E', S, 0); add('AL', 0, heel); add('AR', S, heel); add('P', H, peakTop);
+ if (heel > 0) m.push(['A', 'AL', 'W', 'Heel vertical'], ['E', 'AR', 'W', 'Heel vertical']);
+ m.push(['AL', 'P', 'TC', 'Top chord L'], ['AR', 'P', 'TC', 'Top chord R']);
+ let tcPanel = Math.hypot(H / 2, tp * H / 2), atticInfo = null;
+ if (t === 'scissor') {
+  const tq = q / 12; ceilPeak = tq * H;
+  add('C', H, ceilPeak); add('TL', H / 2, top(H / 2)); add('TR', S - H / 2, top(H / 2));
+  add('BL', H / 2, tq * H / 2); add('BR', S - H / 2, tq * H / 2);
+  m.push(['A', 'C', 'BC', 'Bottom chord L (sloped)'], ['E', 'C', 'BC', 'Bottom chord R (sloped)'],
+   ['BL', 'TL', 'W', 'Web W1 L (vertical)'], ['BR', 'TR', 'W', 'Web W1 R (vertical)'],
+   ['TL', 'C', 'W', 'Web W2 L (diag)'], ['TR', 'C', 'W', 'Web W2 R (diag)'], ['C', 'P', 'W', 'Center vertical']);
+ } else {
+  m.push(['A', 'E', 'BC', 'Bottom chord']);
+  if (t === 'fink') {
+   add('TL', H / 2, top(H / 2)); add('TR', S - H / 2, top(H / 2)); add('BL', S / 3, 0); add('BR', 2 * S / 3, 0);
+   m.push(['BL', 'TL', 'W', 'Web W1 L'], ['BR', 'TR', 'W', 'Web W1 R'], ['BL', 'P', 'W', 'Web W2 L'], ['BR', 'P', 'W', 'Web W2 R']);
+  } else if (t === 'howe') {
+   add('TL', H / 2, top(H / 2)); add('TR', S - H / 2, top(H / 2)); add('BL', H / 2, 0); add('BR', S - H / 2, 0); add('BC', H, 0);
+   m.push(['BL', 'TL', 'W', 'Vertical V1 L'], ['BR', 'TR', 'W', 'Vertical V1 R'], ['BC', 'P', 'W', 'King vertical'], ['TL', 'BC', 'W', 'Diagonal D1 L'], ['TR', 'BC', 'W', 'Diagonal D1 R']);
+  } else if (t === 'king') {
+   add('BC', H, 0); m.push(['BC', 'P', 'W', 'King post']); tcPanel = Math.hypot(H, tp * H);
+  } else if (t === 'queen') {
+   add('TL', S / 3, top(S / 3)); add('TR', 2 * S / 3, top(S / 3)); add('BL', S / 3, 0); add('BR', 2 * S / 3, 0);
+   m.push(['BL', 'TL', 'W', 'Queen post L'], ['BR', 'TR', 'W', 'Queen post R'], ['TL', 'TR', 'W', 'Straining beam / collar']);
+   tcPanel = Math.hypot(S / 3, tp * S / 3);
+  } else if (t === 'attic') {
+   const xw = (S - roomW) / 2;
+   const xc = Math.min(H, Math.max(xw, (roomH - heel) / tp)); // where ceiling meets top chord (left)
+   add('KL', xw, 0); add('KR', S - xw, 0); add('KTL', xw, top(xw)); add('KTR', S - xw, top(xw));
+   add('CL', xc, roomH); add('CR', S - xc, roomH);
+   m.push(['KL', 'KTL', 'W', 'Knee wall L'], ['KR', 'KTR', 'W', 'Knee wall R'], ['CL', 'CR', 'W', 'Attic ceiling joist'], ['A', 'KTL', 'W', 'Diagonal L'], ['E', 'KTR', 'W', 'Diagonal R']);
+   tcPanel = Math.max(Math.hypot(xw, tp * xw), Math.hypot(H - xw, tp * (H - xw)));
+   atticInfo = { kneeH: top(xw), roomW, roomH, fits: roomH <= top(xw) + 0 || xc > xw, xc, ok: roomH < peakTop && xw > 0 };
+  }
+ }
+ return { n, m, peakTop, ceilPeak, tcPanel, atticInfo, heelNode: 'AL', heel };
+}
+
+const KZ = { B: 0.57, C: 0.85, D: 1.03 };
+// ===== Joint analysis: 2D frame stiffness — chords continuous (beam elements), webs pin-ended (axial only) =====
+function buildModel(g, S, ov, ang, t) {
+ const keys = Object.keys(g.n), id = {}, nodes = [];
+ const tol = 1e-6;
+ keys.forEach(k => { const p = g.n[k]; let j = nodes.findIndex(q => Math.abs(q.x - p.x) < 1e-6 && Math.abs(q.y - p.y) < 1e-6); if (j < 0) { j = nodes.length; nodes.push({ x: p.x, y: p.y, keys: [] }); } nodes[j].keys.push(k); id[k] = j; });
+ let mem = [];
+ g.m.forEach(([a, b, ty, lab]) => { const i = id[a], j = id[b]; if (i === j) return; mem.push({ i, j, ty, lab }); });
+ // overhang tip nodes
+ const hl = id[g.heelNode]; const dy = ov * Math.tan(ang);
+ if (ov > 0) {
+  nodes.push({ x: nodes[hl].x - ov, y: nodes[hl].y - dy, keys: ['OL'] }); mem.push({ i: nodes.length - 1, j: hl, ty: 'TC', lab: 'Overhang L' });
+  if (t !== 'mono') { const hr = id.AR; nodes.push({ x: nodes[hr].x + ov, y: nodes[hr].y - dy, keys: ['OR'] }); mem.push({ i: hr, j: nodes.length - 1, ty: 'TC', lab: 'Overhang R' }); }
+ }
+ // raised heel: add heel web from top of heel to first interior bottom-chord node (typical energy-heel layout)
+ if (g.heel > 0) [[id.A, id[g.heelNode], 1], [id.E, id.AR, -1]].forEach(([bi, ti, dir]) => { if (bi === undefined || ti === undefined) return;
+  let best = -1, bd = 1e9; nodes.forEach((n, k) => { const dx = (n.x - nodes[bi].x) * dir; if (Math.abs(n.y) < 1e-6 && dx > 1e-6 && dx < bd) { bd = dx; best = k; } });
+  if (best >= 0 && !mem.some(m => (m.i === ti && m.j === best) || (m.j === ti && m.i === best))) mem.push({ i: ti, j: best, ty: 'W', lab: 'Heel diagonal' + (dir > 0 ? ' L' : ' R') }); });
+ // split members at intermediate collinear nodes
+ let changed = true;
+ while (changed) { changed = false; for (let mi = 0; mi < mem.length; mi++) { const m = mem[mi], A = nodes[m.i], B = nodes[m.j], L = Math.hypot(B.x - A.x, B.y - A.y);
+  for (let k = 0; k < nodes.length; k++) { if (k === m.i || k === m.j) continue; const P = nodes[k];
+   const s = ((P.x - A.x) * (B.x - A.x) + (P.y - A.y) * (B.y - A.y)) / (L * L); const cr = Math.abs((B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x)) / L;
+   if (s > 1e-6 && s < 1 - 1e-6 && cr < 1e-6) { mem.splice(mi, 1, { ...m, j: k }, { ...m, i: k }); changed = true; break; } }
+  if (changed) break; } }
+ // drop duplicate members
+ const seen = new Set(); mem = mem.filter(m => { const k = Math.min(m.i, m.j) + '-' + Math.max(m.i, m.j); if (seen.has(k)) return false; seen.add(k); return true; });
+ // label joints J1.. sorted left-to-right, bottom-to-top
+ const order = nodes.map((n, k) => k).sort((a, b) => nodes[a].x - nodes[b].x || nodes[a].y - nodes[b].y);
+ order.forEach((k, r) => nodes[k].lab = 'J' + (r + 1));
+ const ia = id.A, ie = id.E;
+ return { nodes, mem, ia, ie };
+}
+function solveLin(K, F) { const n = F.length, A = K.map((r, i) => [...r, F[i]]);
+ for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]];
+  if (Math.abs(A[c][c]) < 1e-12) return null; for (let r = 0; r < n; r++) if (r !== c) { const f = A[r][c] / A[c][c]; if (f) for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; } }
+ return A.map((r, i) => r[n] / r[i]); }
+function analyze(model, props, loadsTop, loadsBot, pinPin, floor) {
+ const { nodes, mem, ia, ie } = model, nd = nodes.length * 3;
+ const K = Array.from({ length: nd }, () => new Array(nd).fill(0)), F = new Array(nd).fill(0);
+ const els = mem.map(m => {
+  const A = nodes[m.i], B = nodes[m.j], Lft = Math.hypot(B.x - A.x, B.y - A.y), L = Lft * 12, c = (B.x - A.x) / Lft, s = (B.y - A.y) / Lft;
+  const fr = m.ty !== 'W' || /Knee wall|ceiling joist/.test(m.lab); const p = fr ? props.chord : props.web, E = props.E, EA = E * p.A, EI = fr ? E * p.I : 0;
+  const kl = Array.from({ length: 6 }, () => new Array(6).fill(0));
+  kl[0][0] = kl[3][3] = EA / L; kl[0][3] = kl[3][0] = -EA / L;
+  if (EI) { const a = 12 * EI / L ** 3, b = 6 * EI / L ** 2, d = 4 * EI / L, e = 2 * EI / L;
+   [[1, 1, a], [1, 2, b], [1, 4, -a], [1, 5, b], [2, 2, d], [2, 4, -b], [2, 5, e], [4, 4, a], [4, 5, -b], [5, 5, d]].forEach(([r, q, v]) => { kl[r][q] = v; kl[q][r] = v; }); }
+  const T = Array.from({ length: 6 }, () => new Array(6).fill(0));
+  [0, 3].forEach(o => { T[o][o] = c; T[o][o + 1] = s; T[o + 1][o] = -s; T[o + 1][o + 1] = c; T[o + 2][o + 2] = 1; });
+  const dof = [m.i * 3, m.i * 3 + 1, m.i * 3 + 2, m.j * 3, m.j * 3 + 1, m.j * 3 + 2];
+  const kg = Array.from({ length: 6 }, (_, r) => Array.from({ length: 6 }, (_, q) => { let v = 0; for (let x = 0; x < 6; x++) for (let y = 0; y < 6; y++) v += T[x][r] * kl[x][y] * T[y][q]; return v; }));
+  for (let r = 0; r < 6; r++) for (let q = 0; q < 6; q++) K[dof[r]][dof[q]] += kg[r][q];
+  // panel-point loads (lb): w (psf×spacing, plf on horizontal projection) lumped half to each end
+  const dx = Math.abs(B.x - A.x), w = m.ty === 'TC' ? loadsTop : m.ty === 'BC' ? loadsBot : 0;
+  let wf = w; if (floor && m.ty === 'BC' && Math.min(A.x, B.x) >= floor.x1 - 1e-6 && Math.max(A.x, B.x) <= floor.x2 + 1e-6) wf += floor.w;
+  F[dof[1]] -= wf * dx / 2; F[dof[4]] -= wf * dx / 2;
+  return { m, kl, T, dof, Lft };
+ });
+ const Fapp = F.slice();
+ for (let k = 0; k < nodes.length; k++) K[k * 3 + 2][k * 3 + 2] += 1e-3; // tiny rotational spring (pin-only nodes)
+ const fixed = [ia * 3, ia * 3 + 1, ie * 3 + 1]; if (pinPin) fixed.push(ie * 3);
+ const free = [...Array(nd).keys()].filter(d => !fixed.includes(d));
+ const u0 = solveLin(free.map(r => free.map(q => K[r][q])), free.map(r => F[r])); if (!u0) return null;
+ const u = new Array(nd).fill(0); free.forEach((d, k) => u[d] = u0[k]);
+ const R = new Array(nd).fill(0); for (let r = 0; r < nd; r++) { let v = 0; for (let q = 0; q < nd; q++) v += K[r][q] * u[q]; R[r] = v - Fapp[r]; }
+ const resid = []; // joint equilibrium from element end forces
+ const endF = new Array(nd).fill(0);
+ els.forEach(e => { const ug = e.dof.map(d => u[d]), ul = [0, 1, 2, 3, 4, 5].map(r => e.T[r].reduce((a, v, q) => a + v * ug[q], 0));
+  const fl = e.kl.map(row => row.reduce((a, v, q) => a + v * ul[q], 0)); e.N = -fl[0]; // + tension
+  e.M = Math.max(Math.abs(fl[2]), Math.abs(fl[5])) / 12; // ft-lb
+  const fg = [0, 1, 2, 3, 4, 5].map(r => [0, 1, 2, 3, 4, 5].reduce((a, q) => a + e.T[q][r] * fl[q], 0)); e.dof.forEach((d, k) => endF[d] += fg[k]); });
+ let maxRes = 0; nodes.forEach((n, k) => { for (const o of [0, 1]) { const d = k * 3 + o; const r = fixed.includes(d) ? 0 : endF[d] - Fapp[d]; maxRes = Math.max(maxRes, Math.abs(r)); } });
+ return { els, R, u, maxRes, sumFy: Fapp.reduce((a, v, d) => a + (d % 3 === 1 ? v : 0), 0), ia, ie };
+}
+
+const SST = q => `https://www.strongtie.com/search?q=${encodeURIComponent(q)}`, MTK = q => `https://www.mitek-us.com/?s=${encodeURIComponent(q)}`;
+const lk = (q1, q2) => `<a href="${SST(q1)}" target="_blank" rel="noopener">Simpson</a> · <a href="${MTK(q2)}" target="_blank" rel="noopener">MiTek</a>`;
+function jointOutput(model, props, wtG, wbG, wtW, wbW, gName, floor) {
+ const G = analyze(model, props, wtG, wbG, false, floor), Wd = analyze(model, props, wtW, wbW, false), GP = analyze(model, props, wtG, wbG, true, floor);
+ window._truss = { G, Wd, GP, model };
+ if (!G || !Wd || !GP) { $('joints').innerHTML = '<div class="err">Structure is unstable for this geometry – check inputs.</div>'; return; }
+ const { nodes } = model, fmt = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(0);
+ let h = `<div class="hint">Frame/pin model: chords continuous, webs pin-ended; left bearing pinned, right bearing on slide (roller). Panel-point loads: top chord ${gName} = ${wtG.toFixed(1)} plf, BC ${wbG.toFixed(1)} plf; wind 0.6D+0.6W top = ${wtW.toFixed(1)} plf (uplift applied vertically on plan, approx.), BC ${wbW.toFixed(1)} plf. ${floor ? `Attic floor live load ${floor.w.toFixed(1)} plf on BC between knee walls (gravity case). Knee walls &amp; ceiling joist modelled as frame members. ` : ''}Forces in lb: <b>+ tension / − compression</b>. Equilibrium check: max joint residual ${Math.max(G.maxRes, Wd.maxRes).toExponential(1)} lb; ΣR<sub>y</sub> = ${(G.R[G.ia * 3 + 1] + G.R[G.ie * 3 + 1]).toFixed(0)} lb vs applied ${(-G.sumFy).toFixed(0)} lb.</div>`;
+ h += `<table><tr><th>Joint</th><th>x, y (ft)</th><th>Members (${gName} / 0.6D+0.6W)</th><th>Max web force at joint – plate/connection demand (${gName} / wind)</th><th>Connector lookup</th></tr>`;
+ nodes.map((n, k) => k).sort((a, b) => +nodes[a].lab.slice(1) - +nodes[b].lab.slice(1)).forEach(k => { const n = nodes[k];
+  const at = G.els.map((e, q) => ({ e, w: Wd.els[q] })).filter(o => o.e.m.i === k || o.e.m.j === k);
+  const list = at.map(o => `${o.e.m.lab}: ${fmt(o.e.N)} / ${fmt(o.w.N)}`).join('<br>');
+  const webs = at.filter(o => o.e.m.ty === 'W');
+  const mg = webs.length ? Math.max(...webs.map(o => Math.abs(o.e.N))) : 0, mw = webs.length ? Math.max(...webs.map(o => Math.abs(o.w.N))) : 0;
+  const brg = k === model.ia || k === model.ie;
+  h += `<tr><td><b>${n.lab}</b>${brg ? '<br>(bearing)' : ''}</td><td>${n.x.toFixed(2)}, ${n.y.toFixed(2)}</td><td style="text-align:left;font-size:.8em">${list}</td><td>${webs.length ? mg.toFixed(0) + ' / ' + mw.toFixed(0) + ' lb' : '— (chord splice/heel only)'}</td><td style="font-size:.8em">${brg ? 'Heel: see below' : 'Truss plate: ' + lk('truss plate', 'truss plate')}</td></tr>`;
+ });
+ h += '</table>';
+ const side = (k, nm) => { const Rg = G.R[k * 3 + 1], Rw = Wd.R[k * 3 + 1], Hx = GP.R[k * 3];
+  return `<tr><td><b>${nodes[k].lab}</b> ${nm}</td><td>${Rg.toFixed(0)} lb ↓</td><td>${Rw < 0 ? (-Rw).toFixed(0) + ' lb ↑' : 'none (' + Rw.toFixed(0) + ' lb ↓)'}</td><td>${Math.abs(Hx).toFixed(0)} lb</td><td style="font-size:.8em">Uplift tie (e.g. H2.5A / H10A class): ${lk('hurricane tie', 'hurricane tie')}<br>Girder hanger (if supported by girder): ${lk('truss hanger', 'truss hanger')}</td></tr>`; };
+ const dxR = Math.abs(G.u[model.ie * 3]);
+ h += `<h3 style="font-size:1em;color:#0066cc">Heel / Bearing Demands (per truss)</h3><table><tr><th>Bearing</th><th>Gravity reaction (${gName}) = download / hanger demand</th><th>Net uplift (0.6D+0.6W)</th><th>Lateral thrust if both bearings restrained (${gName})</th><th>Connector lookup</th></tr>${side(model.ia, '(left)')}${side(model.ie, '(right)')}</table>`;
+ h += `<div class="hint">Horizontal slide at right bearing with pin/roller supports (${gName}, E=${(props.E / 1e6).toFixed(1)}M, gross sections): <b>${dxR.toFixed(3)} in</b>${dxR > 0.75 ? ' – <b>large: scissor/vault trusses may need slotted/slide bearing connectors or the walls must resist the thrust</b>' : ''}. With roller support the design thrust is 0; the "both restrained" thrust is what the walls/connection would see if the heel is fixed against sliding.</div>`;
+ h += `<div class="warn"><b>Demand only.</b> Select each connector so its allowable load (with the appropriate load-duration factor, e.g. C<sub>D</sub>=1.6 for wind uplift, 1.0/1.15/1.25 for gravity) is ≥ the demand, per the manufacturer's current catalog (Simpson Strong-Tie / MiTek). No allowable values are built into this tool. Metal plate connectors (truss plates) are designed by the truss manufacturer. Uplift in the wind case is approximate (net uplift from vertical projected pressure); verify with ASCE 7-22 C&amp;C/MWFRS.</div>`;
+ $('joints').innerHTML = h;
+}
+function windAutoPsf(V, ex) { const qh = 0.00256 * KZ[ex] * 1.0 * 0.85 * V * V; return qh * 1.18; }
+
+function calculate() {
+ const msgs = [];
+ const t = $('ttype').value;
+ $('scissorBox').style.display = t === 'scissor' ? 'block' : 'none';
+ $('atticBox').style.display = t === 'attic' ? 'block' : 'none';
+ $('pitchLbl').textContent = t === 'scissor' ? 'Top Chord Pitch' : 'Roof Pitch';
+ const S = toFt(+$('span').value, $('spanU').value), L = toFt(+$('blen').value, $('blenU').value), ov = toFt(+$('ovh').value, $('ovhU').value);
+ const p = pitchToSlope(+$('pitch').value), q = t === 'scissor' ? +$('bpitch').value : 0, heel = +$('heel').value / 12;
+ const ang = Math.atan(p / 12), angB = Math.atan(q / 12);
+ $('pitchHint').textContent = angleMode ? `≈ ${p.toFixed(2)}/12` : `= ${(ang * 180 / Math.PI).toFixed(2)}° • rise per 12" of run`;
+ if (!(S > 0 && L > 0 && p > 0)) { $('msgs').innerHTML = '<div class="err">Enter a positive span, length and pitch.</div>'; return; }
+ if (t === 'scissor') {
+  if (q >= p) msgs.push(['err', `Bottom chord pitch (${q}/12) must be less than top pitch (${p.toFixed(2)}/12).`]);
+  else if (q > p / 2 + 1e-9) msgs.push(['warn', `Bottom (ceiling) pitch ${q}/12 exceeds ½ of top pitch (${(p / 2).toFixed(2)}/12). Scissor trusses get very shallow and develop large chord forces/horizontal deflection at bearing – confirm with truss manufacturer (consider slotted bearing / reduce ceiling pitch).`]);
+ }
+ const roomW = +$('roomW').value, roomH = +$('roomH').value;
+ const g = geometry(t, S, p, q, heel, roomW, roomH);
+ if (t === 'attic' && g.atticInfo) {
+  if (!(roomW < S)) msgs.push(['err', 'Attic room width must be less than span.']);
+  if (roomH >= g.peakTop) msgs.push(['err', `Room height ${roomH} ft exceeds peak height ${f2(g.peakTop)} ft – increase pitch or reduce room height.`]);
+  else if (roomH > g.atticInfo.kneeH) msgs.push(['warn', `Room ceiling (${roomH} ft) is above knee-wall height (${f2(g.atticInfo.kneeH)} ft): sloped ceiling portions at sides; flat ceiling width = ${f2(S - 2 * g.atticInfo.xc)} ft.`]);
+  if (p < 8) msgs.push(['warn', 'Attic trusses typically need ≥ 8/12–12/12 pitch for usable room.']);
+ }
+ // member lengths
+ const rows = g.m.map(([a, b, ty, lab]) => ({ ty, lab, len: Math.hypot(g.n[a].x - g.n[b].x, g.n[a].y - g.n[b].y) }));
+ const ovSlope = t === 'mono' ? ov / Math.cos(ang) : ov / Math.cos(ang);
+ rows.forEach(r => { if (r.ty === 'TC') { r.len0 = r.len; r.len += ovSlope; } });
+ if (t === 'mono') rows.find(r => r.ty === 'TC').len += 0; // overhang at low end only (high end assumed flush)
+ const size = $('size').value, [nb, nd] = NOM[size];
+ const bfChord = nb * nd / 12, bfWeb = 2 * 4 / 12;
+ let bf = 0; rows.forEach(r => bf += r.len * (r.ty === 'W' ? bfWeb : bfChord));
+ const sp = +$('spacing').value / 12;
+ const count = Math.floor(L / sp + 1e-6) + 1;
+ const rise = t === 'mono' ? p / 12 * S : p / 12 * S / 2, run = t === 'mono' ? S : S / 2;
+ const rafter = Math.hypot(run, rise) + ovSlope;
+ const nSlopes = t === 'mono' ? 1 : 2;
+ const roofArea = nSlopes * rafter * (L + 2 * ov);
+ const planArea = (S + 2 * ov) * (L + 2 * ov);
+ const lr = +$('lr').value, sn = +$('snow').value, tcdl = +$('tcdl').value, bcdl = +$('bcdl').value;
+ const LL = Math.max(lr, sn), DL = tcdl + bcdl;
+ const V = +$('vwind').value;
+ if ($('windAuto').checked) { $('wind').value = windAutoPsf(V, $('expo').value).toFixed(1); $('wind').readOnly = true; } else $('wind').readOnly = false;
+ const W = +$('wind').value;
+ const totalLoad = (DL + LL) * planArea;
+ const lumberBF = bf * count, cost = lumberBF * +$('price').value;
+ // reactions per truss (lb)
+ const R = (tcdl + LL) * sp * (S / 2 + ov) + bcdl * sp * S / 2;
+ const upl = (W - 0.6 * DL) * sp * (S / 2 + ov); // net uplift per bearing, ASD 0.6D+0.6W with W as psf*0.6 already? keep simple
+ const uplASD = (0.6 * W - 0.6 * DL) * sp * (S / 2 + ov);
+ // top chord check
+ const rv = refVals($('species').value, $('grade').value, size), CD = +$('cd').value, Cr = 1.15;
+ const [b, d] = DIM[size], A = b * d, Sx = b * d * d / 6;
+ const C = R * Math.cos(angB) / Math.sin(ang - angB); // lb, heel joint equilibrium
+ const T = C * Math.cos(ang) / Math.cos(angB);
+ const wPerp = (tcdl + LL) * sp * Math.cos(ang) ** 2; // plf along slope, perpendicular component
+ const Lp = g.tcPanel; // ft
+ const M = wPerp * Lp * Lp / 10 * 12; // in-lb (continuous)
+ const Movh = (tcdl + LL) * sp * Math.cos(ang) * ovSlope * ovSlope / 2 * 12;
+ const Mgov = Math.max(M, Movh);
+ const fb = Mgov / Sx, fc = C / A, ft = T / A;
+ const Fbp = rv.Fb * CD * rv.CFb * Cr; // CL=1 (sheathed)
+ const FcStar = rv.Fc * CD * rv.CFc;
+ const Ke = 0.8, le = Ke * Lp * 12, FcE = 0.822 * rv.Emin / ((le / d) ** 2);
+ const ratio = FcE / FcStar, c = 0.8;
+ const CP = (1 + ratio) / (2 * c) - Math.sqrt(((1 + ratio) / (2 * c)) ** 2 - ratio / c);
+ const Fcp = FcStar * CP, Ftp = rv.Ft * CD * rv.CFt;
+ const inter = fc >= FcE ? Infinity : (fc / Fcp) ** 2 + fb / (Fbp * (1 - fc / FcE));
+ const interOk = inter <= 1 && fc < FcE;
+ const ftOK = ft <= Ftp;
+ // results
+ const cards = [];
+ const cardAdd = (k, v) => cards.push(`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`);
+ cardAdd('Roof height (bearing to peak)', `${f2(g.peakTop)} ft`);
+ cardAdd('Rafter / top chord length', `${f2(rafter)} ft <span style="font-size:.7em">(${ftin(rafter)} incl. ovh)</span>`);
+ cardAdd('Roof angle', `${(ang * 180 / Math.PI).toFixed(2)}° <span style="font-size:.7em">(${p.toFixed(2)}/12)</span>`);
+ cardAdd('Rise', `${f2(rise)} ft`); cardAdd('Run', `${f2(run)} ft`);
+ cardAdd('Roof area (sloped, incl. ovh)', `${roofArea.toFixed(0)} sq ft`);
+ cardAdd('Estimated lumber', `${lumberBF.toFixed(0)} bd ft <span style="font-size:.7em">(${bf.toFixed(1)}/truss)</span>`);
+ cardAdd('Material cost (lumber only)', `$${cost.toFixed(0)}`);
+ cardAdd('Dead load (TCDL+BCDL)', `${DL.toFixed(1)} psf`); cardAdd('Live / snow load', `${LL.toFixed(1)} psf`);
+ cardAdd('Total gravity load on roof', `${totalLoad.toFixed(0)} lb`); cardAdd('Truss count', `${count} trusses`);
+ cardAdd('Bearing reaction / truss', `${R.toFixed(0)} lb`);
+ cardAdd('Net uplift / bearing (0.6D+0.6W)', uplASD > 0 ? `${uplASD.toFixed(0)} lb ↑` : 'none');
+ cardAdd('Wind uplift pressure', `${W.toFixed(1)} psf (V=${V} mph)`);
+ cardAdd('Heel height', `${f2(heel)} ft`);
+ if (t === 'scissor') {
+  cardAdd('Vaulted ceiling peak (above plate)', `${f2(g.ceilPeak)} ft`);
+  cardAdd('Interior clear height at peak', `${f2(+$('wallH').value + g.ceilPeak)} ft`);
+  cardAdd('Truss depth at peak', `${f2(g.peakTop - g.ceilPeak)} ft`);
+  cardAdd('Bottom chord length (each)', `${f2(Math.hypot(S / 2, q / 12 * S / 2))} ft`);
+  cardAdd('Ceiling angle', `${(angB * 180 / Math.PI).toFixed(2)}°`);
+ }
+ if (t === 'attic' && g.atticInfo) { cardAdd('Attic room height', `${f2(roomH)} ft`); cardAdd('Attic room width (floor)', `${f2(roomW)} ft`); cardAdd('Knee wall height', `${f2(g.atticInfo.kneeH)} ft`); }
+ else { cardAdd('Attic room height', '—'); cardAdd('Attic room width', '—'); }
+ $('cards').innerHTML = cards.join('');
+ $('msgs').innerHTML = msgs.map(([c, s]) => `<div class="${c}">${s}</div>`).join('');
+ $('members').innerHTML = '<tr><th>Member</th><th>Type</th><th>Size</th><th>Length (ft)</th><th>ft-in</th></tr>' + rows.map(r =>
+  `<tr><td style="text-align:left">${r.lab}${r.len0 !== undefined ? ' <i>(incl. ' + f2(ovSlope) + ' ft ovh)</i>' : ''}</td><td>${r.ty}</td><td>${r.ty === 'W' ? '2×4' : size.replace('x', '×')}</td><td>${f2(r.len)}</td><td>${ftin(r.len)}</td></tr>`).join('') +
+  `<tr><td colspan="3" style="text-align:right"><b>Board feet per truss</b></td><td colspan="2"><b>${bf.toFixed(1)}</b></td></tr>`;
+ const cls = ok => ok ? 'ok' : 'fail', tag = ok => ok ? 'OK' : 'NG';
+ $('check').innerHTML = `<table>
+ <tr><th>Item</th><th>Value</th><th>Notes</th></tr>
+ <tr><td>Lumber</td><td>${$('species').value} ${$('grade').selectedOptions[0].text} ${size.replace('x', '×')}</td><td>Fb=${rv.Fb}, Fc=${rv.Fc}, Ft=${rv.Ft}, E=${(rv.E / 1e6).toFixed(1)}M, Emin=${rv.Emin} psi</td></tr>
+ <tr><td>Factors</td><td>C<sub>D</sub>=${CD}, C<sub>r</sub>=${Cr}, C<sub>F</sub>(b/c/t)=${rv.CFb}/${rv.CFc}/${rv.CFt}</td><td>C<sub>L</sub>=1 (sheathing), C<sub>M</sub>=C<sub>t</sub>=1 (dry, &lt;100°F)</td></tr>
+ <tr><td>Top chord panel L / l<sub>e</sub>=0.8L (in-plane)</td><td>${f2(Lp)} ft / ${f2(le/12)} ft</td><td>l<sub>e</sub>/d = ${(le / d).toFixed(1)} ${le / d > 50 ? '<b>> 50 NG</b>' : ''}</td></tr>
+ <tr><td>Heel compression C</td><td>${C.toFixed(0)} lb</td><td>f<sub>c</sub>=${fc.toFixed(0)} psi; F′<sub>c</sub>=${Fcp.toFixed(0)} psi (C<sub>P</sub>=${CP.toFixed(3)})</td></tr>
+ <tr><td>Bending (panel wL²/10 or overhang)</td><td>${(Mgov / 12).toFixed(0)} ft-lb</td><td>f<sub>b</sub>=${fb.toFixed(0)} psi; F′<sub>b</sub>=${Fbp.toFixed(0)} psi</td></tr>
+ <tr class="${cls(interOk)}"><td>Combined (NDS Eq. 3.9-3)</td><td>${isFinite(inter) ? inter.toFixed(2) : 'f<sub>c</sub> ≥ F<sub>cE</sub>'}</td><td><b>${tag(interOk)}</b> (≤ 1.00)</td></tr>
+ <tr class="${cls(ftOK)}"><td>Bottom chord tension at heel</td><td>${T.toFixed(0)} lb</td><td>f<sub>t</sub>=${ft.toFixed(0)} / F′<sub>t</sub>=${Ftp.toFixed(0)} psi – <b>${tag(ftOK)}</b> (net section/plates by mfr)</td></tr>
+ </table><div class="hint"><b>Preliminary</b> – simplified hand check for sizing intent only. Final design by truss manufacturer (sealed truss design drawings).</div>`;
+ const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+ $('crit').innerHTML = `<div class="k">Site / Design Criteria</div><div style="font-size:.9em"><b>Address:</b> ${esc($('addr').value) || '—'}<br><b>Risk Category:</b> ${$('riskCat').value} &nbsp; <b>Exposure:</b> ${$('expo').value} (K<sub>z</sub>=${KZ[$('expo').value]}) &nbsp; <b>V:</b> ${V} mph &nbsp; <b>Snow:</b> ${sn} psf<br><i>Source: ASCE Hazard Tool (ASCE 7-22), entered manually.</i></div>`;
+ const model = buildModel(g, S, ov, ang, t);
+ jointOutput(model, { E: rv.E, chord: { A: b * d, I: b * d ** 3 / 12 }, web: { A: 5.25, I: 0 } }, (tcdl + LL) * sp, bcdl * sp, (0.6 * tcdl - 0.6 * W) * sp, 0.6 * bcdl * sp, LL === sn && sn > lr ? 'D+S' : 'D+Lr', t === 'attic' ? { x1: (S - roomW) / 2, x2: (S + roomW) / 2, w: +$('roomLL').value * sp } : null);
+ drawSVG(g, S, ov, ang, t, model);
+ $('pProj').textContent = $('proj').value || '—'; $('pDate').textContent = new Date().toLocaleDateString();
+}
+
+function drawSVG(g, S, ov, ang, t, model) {
+ const W = 560, Hh = 260, pad = 40;
+ const ys = Object.values(g.n).map(n => n.y), ymax = Math.max(...ys, 0.01);
+ const sc = Math.min((W - 2 * pad) / (S + 2 * ov), (Hh - 90) / ymax);
+ const ox = (W - S * sc) / 2, oy = Hh - 55;
+ const X = x => ox + x * sc, Y = y => oy - y * sc;
+ let s = '';
+ // overhang extensions
+ const hn = g.n[g.heelNode], dy = ov * Math.tan(ang);
+ s += `<line x1="${X(hn.x - ov)}" y1="${Y(hn.y - dy)}" x2="${X(hn.x)}" y2="${Y(hn.y)}" stroke="#0066cc" stroke-width="3"/>`;
+ if (t !== 'mono') { const r = g.n.AR; s += `<line x1="${X(r.x + ov)}" y1="${Y(r.y - dy)}" x2="${X(r.x)}" y2="${Y(r.y)}" stroke="#0066cc" stroke-width="3"/>`; }
+ // polygon fill
+ g.m.forEach(([a, b, ty]) => {
+  const A = g.n[a], B = g.n[b];
+  const col = ty === 'TC' ? '#0066cc' : ty === 'BC' ? '#2e8b3d' : '#888';
+  s += `<line x1="${X(A.x)}" y1="${Y(A.y)}" x2="${X(B.x)}" y2="${Y(B.y)}" stroke="${col}" stroke-width="${ty === 'W' ? 1.6 : 3}" ${ty === 'W' ? '' : ''}/>`;
+ });
+ Object.values(g.n).forEach(n => s += `<circle cx="${X(n.x)}" cy="${Y(n.y)}" r="2.5" fill="#333"/>`);
+ // bearings
+ [0, S].forEach(x => s += `<rect x="${X(x) - 5}" y="${oy}" width="10" height="12" fill="#666"/>`);
+ // span dim
+ s += `<line x1="${X(0)}" y1="${oy + 25}" x2="${X(S)}" y2="${oy + 25}" stroke="#333" marker-start="url(#ar)" marker-end="url(#ar)"/>`;
+ s += `<text x="${X(S / 2)}" y="${oy + 40}" text-anchor="middle" font-size="12">Span: ${f2(S)} ft</text>`;
+ // height dim
+ const pk = g.n.P, xh = t === 'mono' ? S + 0.8 / sc * 20 : S / 2;
+ const hx = t === 'mono' ? X(S) + 18 : X(S / 2) + 0;
+ s += `<line x1="${hx}" y1="${Y(0)}" x2="${hx}" y2="${Y(pk.y)}" stroke="#c62828" stroke-dasharray="4 3"/>`;
+ s += `<text x="${hx + 5}" y="${Y(pk.y / 2)}" font-size="11" fill="#c62828">H=${f2(pk.y)} ft</text>`;
+ if (t === 'scissor') s += `<text x="${X(S / 2) + 5}" y="${Y(g.ceilPeak) + 14}" font-size="11" fill="#2e8b3d">ceiling ${f2(g.ceilPeak)} ft</text>`;
+ s += `<text x="${X(hn.x - ov)}" y="${Y(hn.y - dy) + 16}" font-size="10">Overhang ${f2(ov)} ft</text>`;
+ s += `<text x="${X(S * 0.12)}" y="${Y(hn.y) - 6}" font-size="11" fill="#2e8b3d">${(ang * 180 / Math.PI).toFixed(1)}°</text>`;
+ const tc = Math.hypot(pk.x - hn.x, pk.y - hn.y) + ov / Math.cos(ang);
+ s += `<text x="${X((hn.x + pk.x) / 2) - 60}" y="${Y((hn.y + pk.y) / 2) - 8}" font-size="11" fill="#0066cc">Top chord ${f2(tc)} ft</text>`;
+ if (model) model.nodes.forEach(n => s += `<text x="${X(n.x) + 4}" y="${Y(n.y) + (n.y < 0.05 ? 14 : -5)}" font-size="10" font-weight="bold" fill="#6a1b9a">${n.lab}</text>`);
+ $('diagram').innerHTML = `<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse"><path d="M0,1 L7,4 L0,7 z" fill="#333"/></marker></defs>` + s;
+}
+
+function setMode(a) {
+ const v = +$('pitch').value;
+ if (a !== angleMode) $('pitch').value = a ? (Math.atan(v / 12) * 180 / Math.PI).toFixed(2) : (Math.tan(v * Math.PI / 180) * 12).toFixed(2);
+ angleMode = a; $('tRatio').className = a ? 'off' : ''; $('tAngle').className = a ? '' : 'off'; calculate();
+}
+$('tRatio').onclick = () => setMode(false); $('tAngle').onclick = () => setMode(true);
+$('calc').onclick = calculate; $('print').onclick = () => { calculate(); window.print(); };
+$('pdf').onclick = () => { calculate(); const t = document.title; document.title = 'Truss_' + ($('proj').value || 'calc').replace(/\W+/g, '_'); window.print(); document.title = t; };
+$('reset').onclick = () => { Object.entries(DEFAULTS).forEach(([k, v]) => { if ($(k).type === 'checkbox') $(k).checked = v; else $(k).value = v; }); angleMode = false; setMode(false); };
+document.querySelectorAll('#inputs input, #inputs select').forEach(e => e.addEventListener('input', calculate));
+// URL params prefill: ?span=30&ttype=scissor&bpitch=3 ...
+new URLSearchParams(location.search).forEach((v, k) => { if ($(k)) { if ($(k).type === 'checkbox') $(k).checked = v === '1'; else $(k).value = v; } });
+calculate();
+</script>
+</body>
+</html>
