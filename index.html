@@ -119,6 +119,12 @@
   <div style="margin-top:12px">
    <button id="calc" type="button">🧮 Calculate</button><button class="sec" id="reset" type="button">↺ Reset</button><button class="sec" id="pdf" type="button">📄 Export PDF</button><button class="sec" id="print" type="button">🖨 Print</button>
   </div>
+  <div id="saveBox" style="margin-top:10px;background:#f4f8ff;border:1px solid #cde;border-radius:6px;padding:8px 10px">
+   <b>💾 Saved Designs</b> <span class="hint">(stored in this browser; name = Project / Description)</span>
+   <div style="margin-top:6px"><button type="button" id="save">Save</button><button type="button" class="sec" id="saveAs">Save As…</button><button type="button" class="sec" id="exportJson">⬇ Export .json</button><button type="button" class="sec" id="importJson">⬆ Import .json</button><input type="file" id="importFile" accept=".json,application/json" style="display:none"></div>
+   <div class="grid2" style="grid-template-columns:1fr auto auto;align-items:center"><select id="loadSel"><option value="">— Load a saved design —</option></select><button type="button" class="sec" id="loadBtn">Load</button><button type="button" class="sec" id="delBtn" style="color:#c62828;border-color:#c62828">Delete</button></div>
+   <div class="hint" id="saveMsg">Current inputs autosave; a refresh restores them.</div>
+  </div>
  </div>
  <div id="out">
   <svg id="diagram" viewBox="0 0 560 260"></svg>
@@ -139,7 +145,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const DEFAULTS = {};
-document.querySelectorAll('#inputs input, #inputs select').forEach(e => DEFAULTS[e.id] = e.type === 'checkbox' ? e.checked : e.value);
+document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.id && e.id !== 'importFile' && e.id !== 'loadSel') DEFAULTS[e.id] = e.type === 'checkbox' ? e.checked : e.value; });
 let angleMode = false;
 const toFt = (v, u) => u === 'in' ? v / 12 : u === 'm' ? v * 3.28084 : v;
 const f2 = x => (isFinite(x) ? x.toFixed(2) : '—');
@@ -482,8 +488,31 @@ $('tRatio').onclick = () => setMode(false); $('tAngle').onclick = () => setMode(
 $('calc').onclick = calculate; $('print').onclick = () => { calculate(); window.print(); };
 $('pdf').onclick = () => { calculate(); const t = document.title; document.title = 'Truss_' + ($('proj').value || 'calc').replace(/\W+/g, '_'); window.print(); document.title = t; };
 $('reset').onclick = () => { Object.entries(DEFAULTS).forEach(([k, v]) => { if ($(k).type === 'checkbox') $(k).checked = v; else $(k).value = v; }); angleMode = false; setMode(false); };
-document.querySelectorAll('#inputs input, #inputs select').forEach(e => e.addEventListener('input', calculate));
+document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.id !== 'importFile' && e.id !== 'loadSel') e.addEventListener('input', calculate); });
 // URL params prefill: ?span=30&ttype=scissor&bpitch=3 ...
+// ===== Save / Load / Autosave / JSON =====
+const LS_KEY = 'mdiTruss.designs.v1', LS_AUTO = 'mdiTruss.autosave.v1', INPUT_IDS = Object.keys(DEFAULTS).filter(k => k !== 'importFile');
+function getState() { const v = {}; INPUT_IDS.forEach(k => v[k] = $(k).type === 'checkbox' ? $(k).checked : $(k).value); return { app: 'MDI Roof Truss Calculator', version: 1, saved: new Date().toISOString(), angleMode, inputs: v }; }
+function setState(st) { if (!st || !st.inputs) throw new Error('Not a truss design file'); Object.entries(st.inputs).forEach(([k, v]) => { const e = $(k); if (!e || k === 'importFile') return; if (e.type === 'checkbox') e.checked = !!v; else e.value = v; });
+ angleMode = !!st.angleMode; $('tRatio').className = angleMode ? 'off' : ''; $('tAngle').className = angleMode ? '' : 'off'; calculate(); }
+const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch (e) { return {}; } };
+const lsPut = d => localStorage.setItem(LS_KEY, JSON.stringify(d));
+const msg = t => $('saveMsg').textContent = t;
+function refreshList(sel) { const d = lsGet(); $('loadSel').innerHTML = '<option value="">— Load a saved design —</option>' + Object.keys(d).sort().map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n.replace(/</g, '&lt;')} — ${new Date(d[n].saved).toLocaleString()}</option>`).join(''); if (sel) $('loadSel').value = sel; }
+function saveAs(name) { name = (name || '').trim(); if (!name) { msg('Enter a Project / Description name first.'); return; } $('proj').value = name; const d = lsGet(); d[name] = getState(); lsPut(d); refreshList(name); calculate(); msg(`Saved "${name}" ${new Date().toLocaleString()}.`); }
+$('save').onclick = () => saveAs($('proj').value || prompt('Design name / project number:', ''));
+$('saveAs').onclick = () => { const n = prompt('Save as (project name / number):', ($('proj').value || 'Truss') + ' (copy)'); if (n) saveAs(n); };
+$('loadBtn').onclick = () => { const n = $('loadSel').value, d = lsGet(); if (!n || !d[n]) { msg('Pick a saved design.'); return; } setState(d[n]); msg(`Loaded "${n}".`); };
+$('delBtn').onclick = () => { const n = $('loadSel').value, d = lsGet(); if (!n || !d[n]) { msg('Pick a saved design to delete.'); return; } if (!confirm(`Delete saved design "${n}"?`)) return; delete d[n]; lsPut(d); refreshList(); msg(`Deleted "${n}".`); };
+$('exportJson').onclick = () => { const st = getState(), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(st, null, 2)], { type: 'application/json' })); a.download = 'Truss_' + (($('proj').value || 'design').replace(/[^\w.-]+/g, '_')) + '.json'; document.body.appendChild(a); a.click(); a.remove(); msg('Exported ' + a.download); };
+$('importJson').onclick = () => $('importFile').click();
+function importText(txt, fname) { try { setState(JSON.parse(txt)); msg(`Imported ${fname || 'file'} – click Save to keep it in this browser.`); } catch (e) { msg('Import failed: ' + e.message); } }
+$('importFile').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => importText(t, f.name)); e.target.value = ''; };
+const autosave = () => { try { localStorage.setItem(LS_AUTO, JSON.stringify(getState())); } catch (e) {} };
+document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.id !== 'importFile' && e.id !== 'loadSel') { e.addEventListener('input', autosave); e.addEventListener('change', autosave); } });
+['tRatio', 'tAngle', 'reset', 'calc'].forEach(k => $(k).addEventListener('click', () => setTimeout(autosave, 0)));
+refreshList();
+try { const a = JSON.parse(localStorage.getItem(LS_AUTO)); if (a && !location.search) setState(a); } catch (e) {}
 new URLSearchParams(location.search).forEach((v, k) => { if ($(k)) { if ($(k).type === 'checkbox') $(k).checked = v === '1'; else $(k).value = v; } });
 calculate();
 </script>
