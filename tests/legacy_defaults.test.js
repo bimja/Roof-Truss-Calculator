@@ -1,0 +1,3 @@
+const p=require('puppeteer-core');(async()=>{const b=await p.launch({executablePath:'/usr/bin/google-chrome',args:['--no-sandbox'],headless:'new'});const pg=await b.newPage();await pg.goto('http://localhost:8765/index.html');
+const r=await pg.evaluate(()=>{const st=getState();delete st.inputs.clrSp;delete st.inputs.bcBrace;document.getElementById('clrSp').value='9';setState(st);return document.getElementById('clrSp').value+' '+document.getElementById('bcBrace').value});
+console.log((r==='6 ceiling'?'PASS':'FAIL')+' legacy design missing clrSp/bcBrace falls back to defaults ->',r);await b.close()})();

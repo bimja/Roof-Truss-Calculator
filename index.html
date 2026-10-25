@@ -98,7 +98,7 @@
   </div>
   <div class="grid2">
    <div><label>Top Chord Bracing</label><select id="tcBrace"><option value="sheath">Structural sheathing</option><option value="purlin">Purlins</option></select><div id="purlinBox"><label style="font-weight:normal">Purlins @ (in o.c.)</label><input type="number" id="purlinSp" value="24" step="1"></div></div>
-   <div><label>Bottom Chord Bracing</label><select id="bcBrace"><option value="ceiling">Rigid ceiling (gypsum direct-applied)</option><option value="clr">2×4 CLR</option></select><div id="clrBox"><label style="font-weight:normal">CLR @ (ft o.c.)</label><input type="number" id="clrSp" value="10" step="0.5"></div></div>
+   <div><label>Bottom Chord Bracing</label><select id="bcBrace"><option value="ceiling">Rigid ceiling (gypsum direct-applied)</option><option value="clr">2×4 CLR</option></select><div id="clrBox"><label style="font-weight:normal">CLR @ (ft o.c.)</label><input type="number" id="clrSp" value="6" step="0.5"><div class="hint">Default 6 ft: 2×4 flat l<sub>e</sub>/b = 72/1.5 = 48 ≤ 50 (NDS 3.7.1.4)</div></div></div>
   </div>
   <div class="grid2">
    <div><label>Heel Height (in)</label><input type="number" id="heel" value="0" step="0.5"><div class="hint">Vertical depth at bearing (raised/energy heel). 0 = standard</div></div>
@@ -358,7 +358,7 @@ function bracingChecks(rv, b, d, size, t) {
  const webNeed = out.webs.filter(w => w.need);
  $('bracing').innerHTML = `<ul style="margin:4px 0 4px 18px;padding:0;font-size:.9em">
  <li><b>Top chord:</b> ${purl ? `braced by purlins @ ${lu}″ o.c. (each purlin fastened to every truss; purlins braced per BCSI B3)` : 'continuously braced by structural sheathing (fastened per code/truss design)'}.</li>
- <li><b>Bottom chord:</b> ${clr ? `2×4 continuous lateral restraint (CLR) @ ${clrSp} ft o.c., attached with 2-10d nails to each truss, lapped/spliced over ≥ 2 trusses` : 'braced by rigid ceiling – gypsum board applied directly to bottom chords'}.</li>
+ <li><b>Bottom chord:</b> ${clr ? `2×4 continuous lateral restraint (CLR) @ ${clrSp} ft o.c., attached with 2-10d nails to each truss, lapped/spliced over ≥ 2 trusses (max 6 ft o.c. for 2×4 to keep l<sub>e</sub>/b ≤ 50 when the BC is in compression)` : 'braced by rigid ceiling – gypsum board applied directly to bottom chords'}.</li>
  <li><b>Webs:</b> ${webNeed.length ? `CLR / T-brace where marked on the diagram: ${webNeed.map(w => w.m.lab + (w.tb ? ' (T-brace)' : ' (CLR)')).join(', ')} – preliminary; truss design drawings govern which webs require restraint` : 'no web restraint indicated by the preliminary check; truss design drawings govern'}.</li>
  <li><b>Diagonal bracing:</b> tie every CLR line with diagonal bracing at ~45° back to the end walls / gable ends (repeat ≈ every 20 ft) so CLRs cannot move together, per BCSI B1 / B3 and ANSI/TPI 1.</li>
  ${out.bcComp > 0 ? `<li class="warn" style="list-style:none;margin-left:-18px"><b>Bottom chord in compression (${out.bcComp.toFixed(0)} lb under ${t === 'scissor' ? 'wind uplift – typical of scissor/vaulted trusses' : 'wind uplift'}).</b> The ceiling or CLR system must brace the BC against buckling; ${t === 'scissor' ? 'for a vaulted ceiling the sloped BC needs the gypsum fastened per truss design or CLR + diagonals in the attic space, and the heel needs an uplift tie.' : 'verify ceiling attachment.'}</li>` : ''}
@@ -554,7 +554,7 @@ document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.
 // ===== Save / Load / Autosave / JSON =====
 const LS_KEY = 'mdiTruss.designs.v1', LS_AUTO = 'mdiTruss.autosave.v1', INPUT_IDS = Object.keys(DEFAULTS).filter(k => k !== 'importFile');
 function getState() { const v = {}; INPUT_IDS.forEach(k => v[k] = $(k).type === 'checkbox' ? $(k).checked : $(k).value); return { app: 'MDI Roof Truss Calculator', version: 1, saved: new Date().toISOString(), angleMode, inputs: v }; }
-function setState(st) { if (!st || !st.inputs) throw new Error('Not a truss design file'); Object.entries(st.inputs).forEach(([k, v]) => { const e = $(k); if (!e || k === 'importFile') return; if (e.type === 'checkbox') e.checked = !!v; else e.value = v; });
+function setState(st) { if (!st || !st.inputs) throw new Error('Not a truss design file'); const inp = { ...DEFAULTS, ...st.inputs }; Object.entries(inp).forEach(([k, v]) => { const e = $(k); if (!e || k === 'importFile') return; if (e.type === 'checkbox') e.checked = !!v; else e.value = v; });
  angleMode = !!st.angleMode; $('tRatio').className = angleMode ? 'off' : ''; $('tAngle').className = angleMode ? '' : 'off'; calculate(); }
 const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch (e) { return {}; } };
 const lsPut = d => localStorage.setItem(LS_KEY, JSON.stringify(d));
