@@ -107,7 +107,8 @@
   <div class="grid2">
    <div><label>Chord Lumber</label>
     <select id="species"><option value="SYP">Southern Yellow Pine (SYP)</option><option value="SPF">Spruce-Pine-Fir (SPF)</option><option value="DF">Douglas Fir-Larch (DF-L)</option><option value="HF">Hem-Fir (HF)</option></select></div>
-   <div><label>Grade / Size</label><div class="grid2" style="gap:0 6px"><select id="grade"><option value="No2">No. 2</option><option value="No1">No. 1</option></select><select id="size"><option value="2x4">2×4</option><option value="2x6">2×6</option><option value="2x8">2×8</option></select></div><div class="hint">Webs taken as 2×4 same species</div></div>
+   <div><label>Grade / Size</label><div class="grid2" style="gap:0 6px"><select id="grade"><option value="No2">No. 2</option><option value="No1">No. 1</option></select><select id="size"><option value="2x4">2×4</option><option value="2x6">2×6</option><option value="2x8">2×8</option></select></div><div class="hint">Top chord size. Webs taken as 2×4 same species</div></div>
+   <div><label>Bottom Chord Size</label><select id="bsize"><option value="2x4">2×4</option><option value="2x6">2×6</option><option value="2x8">2×8</option></select><div class="hint">Follows top chord until changed. Scissor defaults both to 2×6</div></div>
   </div>
   <h2>Loads (psf)</h2>
   <div class="grid2">
@@ -269,7 +270,7 @@ function analyze(model, props, loadsTop, loadsBot, pinPin, floor) {
  const K = Array.from({ length: nd }, () => new Array(nd).fill(0)), F = new Array(nd).fill(0);
  const els = mem.map(m => {
   const A = nodes[m.i], B = nodes[m.j], Lft = Math.hypot(B.x - A.x, B.y - A.y), L = Lft * 12, c = (B.x - A.x) / Lft, s = (B.y - A.y) / Lft;
-  const fr = m.ty !== 'W' || /Knee wall|ceiling joist/.test(m.lab); const p = fr ? props.chord : props.web, E = props.E, EA = E * p.A, EI = fr ? E * p.I : 0;
+  const fr = m.ty !== 'W' || /Knee wall|ceiling joist/.test(m.lab); const p = fr ? (m.ty === 'BC' && props.bchord ? props.bchord : props.chord) : props.web, E = props.E, EA = E * p.A, EI = fr ? E * p.I : 0;
   const kl = Array.from({ length: 6 }, () => new Array(6).fill(0));
   kl[0][0] = kl[3][3] = EA / L; kl[0][3] = kl[3][0] = -EA / L;
   if (EI) { const a = 12 * EI / L ** 3, b = 6 * EI / L ** 2, d = 4 * EI / L, e = 2 * EI / L;
@@ -344,6 +345,7 @@ function bracingChecks(rv, b, d, size, t) {
   const le1 = worst.L * 12, Fe1 = 0.822 * rv.Emin / (le1 / d) ** 2, le2 = clr ? clrSp * 12 : 0, Fe2 = clr ? 0.822 * rv.Emin / (le2 / b) ** 2 : Infinity;
   const Fe = Math.min(Fe1, Fe2), Fcp = Fs * cP(Fe, Fs), sl = Math.max(le1 / d, clr ? le2 / b : 0), ok = fc <= Fcp && sl <= 50;
   out.bcComp = -worst.N; out.bcOk = ok;
+  out.kingLong = t === 'king' && le1 / d > 50;
   h += `<tr><td>Max BC compression</td><td>${(-worst.N).toFixed(0)} lb (${worst.lab}, ${worst.wind ? '0.6D+0.6W' : 'gravity'})</td><td>C<sub>D</sub>=${CD}; in-plane l<sub>e</sub>=panel ${f2(worst.L)} ft (l<sub>e</sub>/d=${(le1 / d).toFixed(1)})</td></tr>
   <tr><td>BC out-of-plane</td><td>${clr ? `2×4 CLR @ ${clrSp} ft → l<sub>e</sub>/b=${(le2 / b).toFixed(1)}` : 'Rigid ceiling – fully braced'}</td><td>${clr && le2 / b > 50 ? '<b>l<sub>e</sub>/b > 50 NG</b>' : ''} ${Fe2 < Fe1 ? '<b>(governs)</b>' : ''}</td></tr>
   <tr class="${cls(ok)}"><td>BC compression check</td><td>f<sub>c</sub>=${fc.toFixed(0)} / F′<sub>c</sub>=${Fcp.toFixed(0)} psi</td><td><b>${tag(ok)}</b> (axial only; BC bending ignored)</td></tr>`;
@@ -353,9 +355,11 @@ function bracingChecks(rv, b, d, size, t) {
   const L = e.Lft * 12, fc = -N / 5.25, Fs = rw.Fc * 1.25 * rw.CFc, sl = L / 1.5, Fe = 0.822 * rw.Emin / sl ** 2, Fcp = Fs * cP(Fe, Fs);
   const need = sl > 50 || fc > Fcp; let tb = false; if (need) { const sl2 = sl / 2, Fe2 = 0.822 * rv.Emin / sl2 ** 2; tb = sl2 > 50 || fc > Fs * cP(0.822 * rw.Emin / sl2 ** 2, Fs); }
   out.webs.push({ m: e.m, need, tb }); wr.push(`<tr class="${need ? 'amber' : 'ok'}"><td>${e.m.lab}</td><td>${(-N).toFixed(0)} lb, L=${f2(e.Lft)} ft, l<sub>e</sub>/b=${sl.toFixed(0)}</td><td>f<sub>c</sub>=${fc.toFixed(0)} / F′<sub>c</sub>=${Fcp.toFixed(0)} psi unbraced → ${need ? (tb ? '<b>T-brace / L-brace</b> (CLR at mid not enough)' : '<b>CLR at mid-length</b>') : 'no restraint needed'}</td></tr>`); });
+ if (t === 'king') { const bcL = Math.max(...o.G.els.filter(e => e.m.ty === 'BC').map(e => e.Lft)), sld = bcL * 12 / d; out.kingLong = sld > 50; if (out.kingLong) h += `<tr class="fail"><td colspan="3"><b>Panel too long for king post at this span — use Fink or Queen post.</b> (BC panel ${f2(bcL)} ft, in-plane l<sub>e</sub>/d = ${sld.toFixed(1)} > 50)</td></tr>`; }
  h += '<tr><th colspan="3">Compression webs (2×4, out-of-plane, unbraced) – preliminary web restraint</th></tr>' + (wr.join('') || '<tr><td colspan="3">No compression webs</td></tr>');
  $('bcCheck').innerHTML = h;
  const webNeed = out.webs.filter(w => w.need);
+ if (out.kingLong) $('msgs').insertAdjacentHTML('beforeend', '<div class="err"><b>Panel too long for king post at this span — use Fink or Queen post.</b> Bottom chord panel in-plane l<sub>e</sub>/d exceeds 50.</div>');
  $('bracing').innerHTML = `<ul style="margin:4px 0 4px 18px;padding:0;font-size:.9em">
  <li><b>Top chord:</b> ${purl ? `braced by purlins @ ${lu}″ o.c. (each purlin fastened to every truss; purlins braced per BCSI B3)` : 'continuously braced by structural sheathing (fastened per code/truss design)'}.</li>
  <li><b>Bottom chord:</b> ${clr ? `2×4 continuous lateral restraint (CLR) @ ${clrSp} ft o.c., attached with 2-10d nails to each truss, lapped/spliced over ≥ 2 trusses (max 6 ft o.c. for 2×4 to keep l<sub>e</sub>/b ≤ 50 when the BC is in compression)` : 'braced by rigid ceiling – gypsum board applied directly to bottom chords'}.</li>
@@ -396,8 +400,8 @@ function calculate() {
  rows.forEach(r => { if (r.ty === 'TC') { r.len0 = r.len; r.len += ovSlope; } });
  if (t === 'mono') rows.find(r => r.ty === 'TC').len += 0; // overhang at low end only (high end assumed flush)
  const size = $('size').value, [nb, nd] = NOM[size];
- const bfChord = nb * nd / 12, bfWeb = 2 * 4 / 12;
- let bf = 0; rows.forEach(r => bf += r.len * (r.ty === 'W' ? bfWeb : bfChord));
+ const bsize = $('bsize').value, bfChord = nb * nd / 12, bfB = NOM[bsize][0] * NOM[bsize][1] / 12, bfWeb = 2 * 4 / 12;
+ let bf = 0; rows.forEach(r => bf += r.len * (r.ty === 'W' ? bfWeb : r.ty === 'BC' ? bfB : bfChord));
  const sp = +$('spacing').value / 12;
  const count = Math.floor(L / sp + 1e-6) + 1;
  const rise = t === 'mono' ? p / 12 * S : p / 12 * S / 2, run = t === 'mono' ? S : S / 2;
@@ -419,6 +423,7 @@ function calculate() {
  // top chord check
  const rv = refVals($('species').value, $('grade').value, size), CD = +$('cd').value, Cr = 1.15;
  const [b, d] = DIM[size], A = b * d, Sx = b * d * d / 6;
+ const rvB = refVals($('species').value, $('grade').value, bsize), [bB, dB] = DIM[bsize];
  const C = R * Math.cos(angB) / Math.sin(ang - angB); // lb, heel joint equilibrium
  const T = C * Math.cos(ang) / Math.cos(angB);
  const wPerp = (tcdl + LL) * sp * Math.cos(ang) ** 2; // plf along slope, perpendicular component
@@ -426,7 +431,7 @@ function calculate() {
  const M = wPerp * Lp * Lp / 10 * 12; // in-lb (continuous)
  const Movh = (tcdl + LL) * sp * Math.cos(ang) * ovSlope * ovSlope / 2 * 12;
  const Mgov = Math.max(M, Movh);
- const fb = Mgov / Sx, fc = C / A, ft = T / A;
+ const fb = Mgov / Sx, fc = C / A, ft = T / (bB * dB);
  const purl = $('tcBrace').value === 'purlin', lu = purl ? +$('purlinSp').value : 0;
  $('purlinBox').style.display = purl ? 'block' : 'none'; $('clrBox').style.display = $('bcBrace').value === 'clr' ? 'block' : 'none';
  let CL = 1, leB = 0; if (purl && lu > 0) { leB = lu / d < 7 ? 2.06 * lu : 1.63 * lu + 3 * d; const RB = Math.sqrt(leB * d / (b * b)), FbE = 1.2 * rv.Emin / RB ** 2, Fbs = rv.Fb * CD * rv.CFb * Cr, r = FbE / Fbs; CL = (1 + r) / 1.9 - Math.sqrt(((1 + r) / 1.9) ** 2 - r / 0.95); }
@@ -436,7 +441,7 @@ function calculate() {
  const le2 = purl ? lu : 0, FcE2 = le2 > 0 ? 0.822 * rv.Emin / ((le2 / b) ** 2) : Infinity, FcEg = Math.min(FcE, FcE2);
  const ratio = FcEg / FcStar, c = 0.8;
  const CP = (1 + ratio) / (2 * c) - Math.sqrt(((1 + ratio) / (2 * c)) ** 2 - ratio / c);
- const Fcp = FcStar * CP, Ftp = rv.Ft * CD * rv.CFt;
+ const Fcp = FcStar * CP, Ftp = rvB.Ft * CD * rvB.CFt;
  const inter = fc >= FcE ? Infinity : (fc / Fcp) ** 2 + fb / (Fbp * (1 - fc / FcE));
  const interOk = inter <= 1 && fc < FcEg && (!purl || le2 / b <= 50);
  const ftOK = ft <= Ftp;
@@ -468,12 +473,12 @@ function calculate() {
  $('cards').innerHTML = cards.join('');
  $('msgs').innerHTML = msgs.map(([c, s]) => `<div class="${c}">${s}</div>`).join('');
  $('members').innerHTML = '<tr><th>Member</th><th>Type</th><th>Size</th><th>Length (ft)</th><th>ft-in</th></tr>' + rows.map(r =>
-  `<tr><td style="text-align:left">${r.lab}${r.len0 !== undefined ? ' <i>(incl. ' + f2(ovSlope) + ' ft ovh)</i>' : ''}</td><td>${r.ty}</td><td>${r.ty === 'W' ? '2×4' : size.replace('x', '×')}</td><td>${f2(r.len)}</td><td>${ftin(r.len)}</td></tr>`).join('') +
+  `<tr><td style="text-align:left">${r.lab}${r.len0 !== undefined ? ' <i>(incl. ' + f2(ovSlope) + ' ft ovh)</i>' : ''}</td><td>${r.ty}</td><td>${r.ty === 'W' ? '2×4' : (r.ty === 'BC' ? bsize : size).replace('x', '×')}</td><td>${f2(r.len)}</td><td>${ftin(r.len)}</td></tr>`).join('') +
   `<tr><td colspan="3" style="text-align:right"><b>Board feet per truss</b></td><td colspan="2"><b>${bf.toFixed(1)}</b></td></tr>`;
  const cls = ok => ok ? 'ok' : 'fail', tag = ok => ok ? 'OK' : 'NG';
  $('check').innerHTML = `<table>
  <tr><th>Item</th><th>Value</th><th>Notes</th></tr>
- <tr><td>Lumber</td><td>${$('species').value} ${$('grade').selectedOptions[0].text} ${size.replace('x', '×')}</td><td>Fb=${rv.Fb}, Fc=${rv.Fc}, Ft=${rv.Ft}, E=${(rv.E / 1e6).toFixed(1)}M, Emin=${rv.Emin} psi</td></tr>
+ <tr><td>Lumber</td><td>${$('species').value} ${$('grade').selectedOptions[0].text} TC ${size.replace('x', '×')} / BC ${bsize.replace('x', '×')}</td><td>TC: Fb=${rv.Fb}, Fc=${rv.Fc}, Ft=${rv.Ft}, E=${(rv.E / 1e6).toFixed(1)}M, Emin=${rv.Emin} psi</td></tr>
  <tr><td>Factors</td><td>C<sub>D</sub>=${CD}, C<sub>r</sub>=${Cr}, C<sub>F</sub>(b/c/t)=${rv.CFb}/${rv.CFc}/${rv.CFt}</td><td>C<sub>L</sub>=${CL.toFixed(3)} (${purl ? 'purlins @ ' + lu + '″, l<sub>e</sub>=' + leB.toFixed(0) + '″' : 'sheathing'}), C<sub>M</sub>=C<sub>t</sub>=1 (dry, &lt;100°F)</td></tr>
  <tr><td>Top chord panel L / l<sub>e</sub>=0.8L (in-plane)</td><td>${f2(Lp)} ft / ${f2(le/12)} ft</td><td>l<sub>e</sub>/d = ${(le / d).toFixed(1)} ${le / d > 50 ? '<b>> 50 NG</b>' : ''}</td></tr>
  <tr class="${purl && le2 / b > 50 ? 'fail' : ''}"><td>Top chord out-of-plane (weak axis)</td><td>${purl ? 'l<sub>e</sub> = ' + lu + '″ (purlin spacing)' : 'Fully braced (sheathing)'}</td><td>${purl ? 'l<sub>e</sub>/b = ' + (le2 / b).toFixed(1) + (le2 / b > 50 ? ' <b>> 50 NG</b>' : '') + '; F<sub>cE</sub>=' + FcE2.toFixed(0) + ' psi' : '—'} ${FcE2 < FcE ? '<b>(governs C<sub>P</sub>)</b>' : ''}</td></tr>
@@ -485,8 +490,8 @@ function calculate() {
  const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
  $('crit').innerHTML = `<div class="k">Site / Design Criteria</div><div style="font-size:.9em"><b>Address:</b> ${esc($('addr').value) || '—'}<br><b>Risk Category:</b> ${$('riskCat').value} &nbsp; <b>Exposure:</b> ${$('expo').value} (K<sub>z</sub>=${KZ[$('expo').value]}) &nbsp; <b>V:</b> ${V} mph &nbsp; <b>Snow:</b> ${sn} psf<br><i>Source: ASCE Hazard Tool (ASCE 7-22), entered manually.</i></div>`;
  const model = buildModel(g, S, ov, ang, t);
- jointOutput(model, { E: rv.E, chord: { A: b * d, I: b * d ** 3 / 12 }, web: { A: 5.25, I: 0 } }, (tcdl + LL) * sp, bcdl * sp, (0.6 * tcdl - 0.6 * W) * sp, 0.6 * bcdl * sp, LL === sn && sn > lr ? 'D+S' : 'D+Lr', t === 'attic' ? { x1: (S - roomW) / 2, x2: (S + roomW) / 2, w: +$('roomLL').value * sp } : null);
- const br = bracingChecks(rv, b, d, size, t);
+ jointOutput(model, { E: rv.E, chord: { A: b * d, I: b * d ** 3 / 12 }, bchord: { A: bB * dB, I: bB * dB ** 3 / 12 }, web: { A: 5.25, I: 0 } }, (tcdl + LL) * sp, bcdl * sp, (0.6 * tcdl - 0.6 * W) * sp, 0.6 * bcdl * sp, LL === sn && sn > lr ? 'D+S' : 'D+Lr', t === 'attic' ? { x1: (S - roomW) / 2, x2: (S + roomW) / 2, w: +$('roomLL').value * sp } : null);
+ const br = bracingChecks(rvB, bB, dB, bsize, t);
  drawSVG(g, S, ov, ang, t, model, br);
  $('pProj').textContent = $('proj').value || '—'; $('pDate').textContent = new Date().toLocaleDateString();
 }
@@ -548,13 +553,18 @@ function setMode(a) {
 $('tRatio').onclick = () => setMode(false); $('tAngle').onclick = () => setMode(true);
 $('calc').onclick = calculate; $('print').onclick = () => { calculate(); window.print(); };
 $('pdf').onclick = () => { calculate(); const t = document.title; document.title = 'Truss_' + ($('proj').value || 'calc').replace(/\W+/g, '_'); window.print(); document.title = t; };
-$('reset').onclick = () => { Object.entries(DEFAULTS).forEach(([k, v]) => { if ($(k).type === 'checkbox') $(k).checked = v; else $(k).value = v; }); angleMode = false; setMode(false); };
+$('reset').onclick = () => { userSet.size = userSet.bsize = false; Object.entries(DEFAULTS).forEach(([k, v]) => { if ($(k).type === 'checkbox') $(k).checked = v; else $(k).value = v; }); angleMode = false; setMode(false); };
 document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.id !== 'importFile' && e.id !== 'loadSel') e.addEventListener('input', calculate); });
 // URL params prefill: ?span=30&ttype=scissor&bpitch=3 ...
+// ===== Chord size defaults: scissor -> 2x6 TC & BC; BC follows TC until user changes it =====
+const userSet = { size: false, bsize: false };
+$('size').addEventListener('change', () => { userSet.size = true; if (!userSet.bsize) $('bsize').value = $('size').value; calculate(); });
+$('bsize').addEventListener('change', () => { userSet.bsize = true; });
+$('ttype').addEventListener('change', () => { if ($('ttype').value === 'scissor') { if (!userSet.size) $('size').value = '2x6'; if (!userSet.bsize) $('bsize').value = userSet.size ? $('size').value : '2x6'; calculate(); } });
 // ===== Save / Load / Autosave / JSON =====
 const LS_KEY = 'mdiTruss.designs.v1', LS_AUTO = 'mdiTruss.autosave.v1', INPUT_IDS = Object.keys(DEFAULTS).filter(k => k !== 'importFile');
 function getState() { const v = {}; INPUT_IDS.forEach(k => v[k] = $(k).type === 'checkbox' ? $(k).checked : $(k).value); return { app: 'MDI Roof Truss Calculator', version: 1, saved: new Date().toISOString(), angleMode, inputs: v }; }
-function setState(st) { if (!st || !st.inputs) throw new Error('Not a truss design file'); const inp = { ...DEFAULTS, ...st.inputs }; Object.entries(inp).forEach(([k, v]) => { const e = $(k); if (!e || k === 'importFile') return; if (e.type === 'checkbox') e.checked = !!v; else e.value = v; });
+function setState(st) { if (!st || !st.inputs) throw new Error('Not a truss design file'); const inp = { ...DEFAULTS, ...(st.inputs.bsize ? {} : { bsize: st.inputs.size || DEFAULTS.size }), ...st.inputs }; userSet.size = userSet.bsize = true; Object.entries(inp).forEach(([k, v]) => { const e = $(k); if (!e || k === 'importFile') return; if (e.type === 'checkbox') e.checked = !!v; else e.value = v; });
  angleMode = !!st.angleMode; $('tRatio').className = angleMode ? 'off' : ''; $('tAngle').className = angleMode ? '' : 'off'; calculate(); }
 const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch (e) { return {}; } };
 const lsPut = d => localStorage.setItem(LS_KEY, JSON.stringify(d));
@@ -574,7 +584,9 @@ document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.
 ['tRatio', 'tAngle', 'reset', 'calc'].forEach(k => $(k).addEventListener('click', () => setTimeout(autosave, 0)));
 refreshList();
 try { const a = JSON.parse(localStorage.getItem(LS_AUTO)); if (a && !location.search) setState(a); } catch (e) {}
-new URLSearchParams(location.search).forEach((v, k) => { if ($(k)) { if ($(k).type === 'checkbox') $(k).checked = v === '1'; else $(k).value = v; } });
+{ const up = new URLSearchParams(location.search);
+ up.forEach((v, k) => { if ($(k)) { if ($(k).type === 'checkbox') $(k).checked = v === '1'; else $(k).value = v; } });
+ if ([...up.keys()].length) { if (up.get('ttype') === 'scissor' && !up.has('size')) $('size').value = '2x6'; if (!up.has('bsize')) $('bsize').value = (up.get('ttype') === 'scissor' && !up.has('size')) ? '2x6' : $('size').value; if (up.has('size')) userSet.size = true; if (up.has('bsize')) userSet.bsize = true; } }
 calculate();
 </script>
 </body>
