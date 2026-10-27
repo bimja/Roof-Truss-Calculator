@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Roof Truss Calculator (incl. Vaulted / Scissor)</title>
+<title>Roof Truss Calculator (incl. Vaulted / Scissor / Architectural)</title>
 <style>
  body { font-family: Arial, sans-serif; margin: 20px; background: #f0f8ff; color: #333; }
  h1 { color: #0066cc; text-align: center; margin-bottom: 4px; }
@@ -50,7 +50,7 @@
 <body>
 <div class="container">
  <h1>🏠 Roof Truss Calculator</h1>
- <p style="text-align:center;font-style:italic;margin-top:0">MDI &amp; Associates • Preliminary geometry, takeoff &amp; top-chord check • Gulf Coast TX defaults • incl. Vaulted Ceiling (Scissor) truss</p>
+ <p style="text-align:center;font-style:italic;margin-top:0">MDI &amp; Associates • Preliminary geometry, takeoff &amp; top-chord check • Gulf Coast TX defaults • incl. Vaulted Ceiling (Scissor) and Architectural heavy-timber trusses</p>
  <div class="printhdr"><b>Project:</b> <span id="pProj"></span> &nbsp; <b>Date:</b> <span id="pDate"></span></div>
  <div class="layout">
  <div class="no-print" id="inputs">
@@ -74,6 +74,7 @@
    <option value="attic">Attic (room-in-attic)</option>
    <option value="mono">Mono (single slope)</option>
    <option value="scissor">Vaulted Ceiling (Scissor)</option>
+   <option value="arch">Architectural (heavy timber) – exposed patio</option>
   </select>
   <div class="grid2">
    <div><label><span id="pitchLbl">Roof Pitch</span></label>
@@ -88,6 +89,33 @@
     <div><label>Wall Plate Height (ft)</label><input type="number" id="wallH" value="9" step="0.25"><div class="hint">Floor to top of plate, for clear height</div></div>
    </div>
   </div>
+  <div id="archBox" class="conditional" style="background:#f6efe6;border:1px solid #b08a5a;border-radius:6px;padding:6px 10px;margin:6px 0">
+   <b>Architectural (heavy timber) truss</b> <span class="hint">exposed patio / porch trusses – 4x and 6x+ timbers, bolted or knife-plate steel connections by the engineer</span>
+   <div class="grid2">
+    <div><label>Web Pattern</label><select id="archPat"><option value="king">King post</option><option value="kingstrut">King post + struts (open web)</option><option value="queen">Queen post (with straining beam)</option><option value="howe">Howe (open web, verticals + diagonals)</option></select></div>
+    <div><label>Truss Spacing (ft o.c.)</label><input type="number" id="archSp" value="8" step="0.5" min="1"><div class="hint">Typical 4–12 ft with purlins between trusses</div></div>
+    <div><label>Timber Species</label><select id="archSpecies"><option value="DF">Douglas Fir-Larch (DF-L)</option><option value="SYP">Southern Pine (SYP)</option></select></div>
+    <div><label>Grade</label><select id="archGrade"><option value="No1">No. 1</option><option value="No2">No. 2</option></select></div>
+    <div><label>Top Chord</label><select id="archTC" class="tsz"></select></div>
+    <div><label>Bottom Chord</label><select id="archBC" class="tsz"></select></div>
+    <div><label>Webs (posts / struts)</label><select id="archWeb" class="tsz"></select></div>
+    <div><label>Service</label><label style="font-weight:normal"><input type="checkbox" id="archWet" checked> Exposed / wet service (C<sub>M</sub>)</label><div class="hint">Patios: exposed to weather → wet-service factors</div></div>
+    <div><label>Purlins @ (in o.c.)</label><input type="number" id="archPurl" value="24" step="1"><div class="hint">Braces TC laterally (l<sub>u</sub>, out-of-plane l<sub>e</sub>)</div></div>
+    <div><label>BC out-of-plane brace (ft)</label><input type="number" id="archBcBr" value="0" step="0.5"><div class="hint">0 = unbraced full span (typical open patio)</div></div>
+   </div>
+   <b style="font-size:.9em">Connections (by engineer)</b>
+   <div class="grid2">
+    <div><label>Type</label><select id="archConn"><option value="knife">Knife plate (steel plate in kerf) + bolts</option><option value="side">Bolted – steel side plates (both faces)</option></select></div>
+    <div><label>Bolt Dia. / Bolts per member end</label><div class="grid2" style="gap:0 6px"><select id="archBoltD"><option value="0.5">1/2"</option><option value="0.625" selected>5/8"</option><option value="0.75">3/4"</option><option value="0.875">7/8"</option><option value="1">1"</option></select><input type="number" id="archBolts" value="2" min="1" step="1"></div></div>
+    <div><label>Steel Plate Thickness (in)</label><input type="number" id="archPlateT" value="0.25" step="0.0625"></div>
+   </div>
+   <b style="font-size:.9em">Peak point load (e.g. ridge beam bearing on truss)</b>
+   <div class="grid2">
+    <div><label>Dead (lb)</label><input type="number" id="archPkD" value="0"></div>
+    <div><label>Roof live / snow (lb)</label><input type="number" id="archPkL" value="0"></div>
+    <div><label>Wind uplift trib. area (sq ft)</label><input type="number" id="archPkA" value="0"><div class="hint">Peak uplift = 0.6·W·area − 0.6·D</div></div>
+   </div>
+  </div>
   <div id="atticBox" class="conditional" style="background:#fffbe9;border:1px solid #e0c870;border-radius:6px;padding:6px 10px;margin:6px 0">
    <b>Attic room</b>
    <div class="grid2">
@@ -96,15 +124,15 @@
     <div><label>Attic Floor Live Load (psf)</label><input type="number" id="roomLL" value="30"><div class="hint">IRC Table R301.5: 30 sleeping / 40 living</div></div>
    </div>
   </div>
-  <div class="grid2">
+  <div class="grid2 stdOnly">
    <div><label>Top Chord Bracing</label><select id="tcBrace"><option value="sheath">Structural sheathing</option><option value="purlin">Purlins</option></select><div id="purlinBox"><label style="font-weight:normal">Purlins @ (in o.c.)</label><input type="number" id="purlinSp" value="24" step="1"></div></div>
    <div><label>Bottom Chord Bracing</label><select id="bcBrace"><option value="ceiling">Rigid ceiling (gypsum direct-applied)</option><option value="clr">2×4 CLR</option></select><div id="clrBox"><label style="font-weight:normal">CLR @ (ft o.c.)</label><input type="number" id="clrSp" value="6" step="0.5"><div class="hint">Default 6 ft: 2×4 flat l<sub>e</sub>/b = 72/1.5 = 48 ≤ 50 (NDS 3.7.1.4)</div></div></div>
   </div>
-  <div class="grid2">
+  <div class="grid2 stdOnly">
    <div><label>Heel Height (in)</label><input type="number" id="heel" value="0" step="0.5"><div class="hint">Vertical depth at bearing (raised/energy heel). 0 = standard</div></div>
    <div><label>Truss Spacing (in o.c.)</label><select id="spacing"><option>12</option><option>16</option><option selected>24</option></select></div>
   </div>
-  <div class="grid2">
+  <div class="grid2 stdOnly">
    <div><label>Chord Lumber</label>
     <select id="species"><option value="SYP">Southern Yellow Pine (SYP)</option><option value="SPF">Spruce-Pine-Fir (SPF)</option><option value="DF">Douglas Fir-Larch (DF-L)</option><option value="HF">Hem-Fir (HF)</option></select></div>
    <div><label>Grade / Size</label><div class="grid2" style="gap:0 6px"><select id="grade"><option value="No2">No. 2</option><option value="No1">No. 1</option></select><select id="size"><option value="2x4">2×4</option><option value="2x6">2×6</option><option value="2x8">2×8</option></select></div><div class="hint">Top chord size. Webs taken as 2×4 same species</div></div>
@@ -147,10 +175,15 @@
  </div>
  <h2>Joint Forces &amp; Connection Demands</h2>
  <div id="joints"></div>
- <div class="note"><b>PRELIMINARY ONLY.</b> Geometry, takeoff and member check are for budgeting/conceptual layout. Final truss design, member sizes, plates, bracing and uplift connections are by the truss manufacturer (sealed truss design drawings per IRC R802.10 / IBC 2303.4) and the Engineer of Record. Reference design values per NDS Supplement 2018 Table 4A/4B (SYP 4B). Analysis is simplified: top-chord heel compression from joint equilibrium, panel bending w·L²/10, in-plane buckling l<sub>e</sub>=0.8×panel length (continuous chord), sheathing braces weak axis. Wind auto value: q<sub>h</sub>=0.00256·K<sub>z</sub>(B 0.57 / C 0.85 / D 1.03 at h ≤ 15 ft)·K<sub>d</sub>(0.85)·V², net uplift coeff. ≈1.18 (interior zone, enclosed) – verify per ASCE 7-22 Ch. 30.</div>
+ <div class="note"><b>PRELIMINARY ONLY.</b> <b>Architectural (heavy timber):</b> 4× members per NDS Supplement Table 4A/4B (dimension lumber, size factor C<sub>F</sub>), 5×5 and larger per Table 4D (Beams &amp; Stringers / Posts &amp; Timbers, C<sub>F</sub>=(12/d)<sup>1/9</sup> for d &gt; 12″), dressed sizes per NDS Table 1B; wet-service C<sub>M</sub> per table footnotes; connections by the Engineer of Record (simple bolt yield-limit check only). Geometry, takeoff and member check are for budgeting/conceptual layout. Final truss design, member sizes, plates, bracing and uplift connections are by the truss manufacturer (sealed truss design drawings per IRC R802.10 / IBC 2303.4) and the Engineer of Record. Reference design values per NDS Supplement 2018 Table 4A/4B (SYP 4B). Analysis is simplified: top-chord heel compression from joint equilibrium, panel bending w·L²/10, in-plane buckling l<sub>e</sub>=0.8×panel length (continuous chord), sheathing braces weak axis. Wind auto value: q<sub>h</sub>=0.00256·K<sub>z</sub>(B 0.57 / C 0.85 / D 1.03 at h ≤ 15 ft)·K<sub>d</sub>(0.85)·V², net uplift coeff. ≈1.18 (interior zone, enclosed) – verify per ASCE 7-22 Ch. 30.</div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
+// ===== Architectural (heavy timber) sizes: NDS dressed sizes (4x = dimension lumber S-dry; 5x5 and larger = timbers, dressed green ½" off) =====
+const TIMBER = { '4x4': [3.5, 3.5], '4x6': [3.5, 5.5], '4x8': [3.5, 7.25], '4x10': [3.5, 9.25], '4x12': [3.5, 11.25],
+ '6x6': [5.5, 5.5], '6x8': [5.5, 7.5], '6x10': [5.5, 9.5], '6x12': [5.5, 11.5], '8x8': [7.5, 7.5], '8x10': [7.5, 9.5], '8x12': [7.5, 11.5] };
+const ARCH_DEF = { archTC: '4x8', archBC: '4x8', archWeb: '4x6' };
+document.querySelectorAll('select.tsz').forEach(e => { e.innerHTML = Object.keys(TIMBER).map(k => `<option value="${k}">${k.replace('x', '×')}</option>`).join(''); e.value = ARCH_DEF[e.id]; });
 const DEFAULTS = {};
 document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.id && e.id !== 'importFile' && e.id !== 'loadSel') DEFAULTS[e.id] = e.type === 'checkbox' ? e.checked : e.value; });
 let angleMode = false;
@@ -209,6 +242,9 @@ function geometry(t, S, p, q, heel, roomW, roomH) {
   } else if (t === 'howe') {
    add('TL', H / 2, top(H / 2)); add('TR', S - H / 2, top(H / 2)); add('BL', H / 2, 0); add('BR', S - H / 2, 0); add('BC', H, 0);
    m.push(['BL', 'TL', 'W', 'Vertical V1 L'], ['BR', 'TR', 'W', 'Vertical V1 R'], ['BC', 'P', 'W', 'King vertical'], ['TL', 'BC', 'W', 'Diagonal D1 L'], ['TR', 'BC', 'W', 'Diagonal D1 R']);
+  } else if (t === 'kingstrut') {
+   add('TL', H / 2, top(H / 2)); add('TR', S - H / 2, top(H / 2)); add('BC', H, 0);
+   m.push(['BC', 'P', 'W', 'King post'], ['TL', 'BC', 'W', 'Strut L'], ['TR', 'BC', 'W', 'Strut R']);
   } else if (t === 'king') {
    add('BC', H, 0); m.push(['BC', 'P', 'W', 'King post']); tcPanel = Math.hypot(H, tp * H);
   } else if (t === 'queen') {
@@ -265,12 +301,12 @@ function solveLin(K, F) { const n = F.length, A = K.map((r, i) => [...r, F[i]]);
  for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]];
   if (Math.abs(A[c][c]) < 1e-12) return null; for (let r = 0; r < n; r++) if (r !== c) { const f = A[r][c] / A[c][c]; if (f) for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; } }
  return A.map((r, i) => r[n] / r[i]); }
-function analyze(model, props, loadsTop, loadsBot, pinPin, floor) {
+function analyze(model, props, loadsTop, loadsBot, pinPin, floor, pts) {
  const { nodes, mem, ia, ie } = model, nd = nodes.length * 3;
  const K = Array.from({ length: nd }, () => new Array(nd).fill(0)), F = new Array(nd).fill(0);
  const els = mem.map(m => {
   const A = nodes[m.i], B = nodes[m.j], Lft = Math.hypot(B.x - A.x, B.y - A.y), L = Lft * 12, c = (B.x - A.x) / Lft, s = (B.y - A.y) / Lft;
-  const fr = m.ty !== 'W' || /Knee wall|ceiling joist/.test(m.lab); const p = fr ? (m.ty === 'BC' && props.bchord ? props.bchord : props.chord) : props.web, E = props.E, EA = E * p.A, EI = fr ? E * p.I : 0;
+  const fr = m.ty !== 'W' || /Knee wall|ceiling joist/.test(m.lab); const p = !fr && props.arch ? props.web : fr ? (m.ty === 'BC' && props.bchord ? props.bchord : props.chord) : props.web, E = props.E, EA = E * p.A, EI = fr ? E * p.I : 0;
   const kl = Array.from({ length: 6 }, () => new Array(6).fill(0));
   kl[0][0] = kl[3][3] = EA / L; kl[0][3] = kl[3][0] = -EA / L;
   if (EI) { const a = 12 * EI / L ** 3, b = 6 * EI / L ** 2, d = 4 * EI / L, e = 2 * EI / L;
@@ -286,6 +322,7 @@ function analyze(model, props, loadsTop, loadsBot, pinPin, floor) {
   F[dof[1]] -= wf * dx / 2; F[dof[4]] -= wf * dx / 2;
   return { m, kl, T, dof, Lft };
  });
+ (pts || []).forEach(([k, fy]) => { if (k >= 0) F[k * 3 + 1] += fy; });
  const Fapp = F.slice();
  for (let k = 0; k < nodes.length; k++) K[k * 3 + 2][k * 3 + 2] += 1e-3; // tiny rotational spring (pin-only nodes)
  const fixed = [ia * 3, ia * 3 + 1, ie * 3 + 1]; if (pinPin) fixed.push(ie * 3);
@@ -305,8 +342,8 @@ function analyze(model, props, loadsTop, loadsBot, pinPin, floor) {
 
 const SST = q => `https://www.strongtie.com/search?q=${encodeURIComponent(q)}`, MTK = q => `https://www.mitek-us.com/?s=${encodeURIComponent(q)}`;
 const lk = (q1, q2) => `<a href="${SST(q1)}" target="_blank" rel="noopener">Simpson</a> · <a href="${MTK(q2)}" target="_blank" rel="noopener">MiTek</a>`;
-function jointOutput(model, props, wtG, wbG, wtW, wbW, gName, floor) {
- const G = analyze(model, props, wtG, wbG, false, floor), Wd = analyze(model, props, wtW, wbW, false), GP = analyze(model, props, wtG, wbG, true, floor);
+function jointOutput(model, props, wtG, wbG, wtW, wbW, gName, floor, pts) {
+ const G = analyze(model, props, wtG, wbG, false, floor, pts && pts.G), Wd = analyze(model, props, wtW, wbW, false, null, pts && pts.W), GP = analyze(model, props, wtG, wbG, true, floor, pts && pts.G);
  window._truss = { G, Wd, GP, model };
  if (!G || !Wd || !GP) { $('joints').innerHTML = '<div class="err">Structure is unstable for this geometry – check inputs.</div>'; return; }
  const { nodes } = model, fmt = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(0);
@@ -318,7 +355,7 @@ function jointOutput(model, props, wtG, wbG, wtW, wbW, gName, floor) {
   const webs = at.filter(o => o.e.m.ty === 'W');
   const mg = webs.length ? Math.max(...webs.map(o => Math.abs(o.e.N))) : 0, mw = webs.length ? Math.max(...webs.map(o => Math.abs(o.w.N))) : 0;
   const brg = k === model.ia || k === model.ie;
-  h += `<tr><td><b>${n.lab}</b>${brg ? '<br>(bearing)' : ''}</td><td>${n.x.toFixed(2)}, ${n.y.toFixed(2)}</td><td style="text-align:left;font-size:.8em">${list}</td><td>${webs.length ? mg.toFixed(0) + ' / ' + mw.toFixed(0) + ' lb' : '— (chord splice/heel only)'}</td><td style="font-size:.8em">${brg ? 'Heel: see below' : 'Truss plate: ' + lk('truss plate', 'truss plate')}</td></tr>`;
+  h += `<tr><td><b>${n.lab}</b>${brg ? '<br>(bearing)' : ''}</td><td>${n.x.toFixed(2)}, ${n.y.toFixed(2)}</td><td style="text-align:left;font-size:.8em">${list}</td><td>${webs.length ? mg.toFixed(0) + ' / ' + mw.toFixed(0) + ' lb' : '— (chord splice/heel only)'}</td><td style="font-size:.8em">${brg ? 'Heel: see below' : props.arch ? 'Bolted / knife-plate steel – by engineer' : 'Truss plate: ' + lk('truss plate', 'truss plate')}</td></tr>`;
  });
  h += '</table>';
  const side = (k, nm) => { const Rg = G.R[k * 3 + 1], Rw = Wd.R[k * 3 + 1], Hx = GP.R[k * 3];
@@ -369,6 +406,152 @@ function bracingChecks(rv, b, d, size, t) {
  <li><b>Final permanent bracing</b> per the truss manufacturer's sealed truss design drawings and BCSI; temporary/installation bracing per BCSI B1/B2.</li></ul>`;
  return out;
 }
+
+// ===== Architectural heavy-timber truss =====
+// NDS 2018 Supplement. 4x: dimension lumber (Table 4A DF-L w/ C_F; Table 4B SYP size-specific, F_b×1.1 for 4" thick ≥ 8" wide).
+// 5x5 and larger: Timbers Table 4D – Beams & Stringers (width > thickness + 2") / Posts & Timbers; C_F = (12/d)^(1/9) for d > 12".
+const NDS_TIMB = {
+ DF: { BS: { No1: { Fb: 1350, Ft: 675, Fc: 925, E: 1.6e6, Emin: 580000 }, No2: { Fb: 875, Ft: 425, Fc: 600, E: 1.3e6, Emin: 470000 } },
+       PT: { No1: { Fb: 1200, Ft: 825, Fc: 1000, E: 1.6e6, Emin: 580000 }, No2: { Fb: 750, Ft: 475, Fc: 700, E: 1.3e6, Emin: 470000 } }, G: 0.50 },
+ SYP: { BS: { No1: { Fb: 1350, Ft: 900, Fc: 825, E: 1.5e6, Emin: 550000 }, No2: { Fb: 850, Ft: 550, Fc: 525, E: 1.2e6, Emin: 440000 } },
+       PT: { No1: { Fb: 1350, Ft: 900, Fc: 825, E: 1.5e6, Emin: 550000 }, No2: { Fb: 850, Ft: 550, Fc: 525, E: 1.2e6, Emin: 440000 } }, G: 0.55 }
+};
+const DIM4_DF = { No1: { Fb: 1000, Ft: 675, Fc: 1500, E: 1.7e6, Emin: 620000 }, No2: { Fb: 900, Ft: 575, Fc: 1350, E: 1.6e6, Emin: 580000 } };
+const CF4_DF = { 4: [1.5, 1.5, 1.15], 6: [1.3, 1.3, 1.1], 8: [1.3, 1.2, 1.05], 10: [1.2, 1.1, 1.0], 12: [1.1, 1.0, 1.0] }; // Fb, Ft, Fc (4" thick)
+const DIM4_SYP = { No1: { 4: [1350, 875, 1550], 6: [1250, 800, 1500], 8: [1200, 750, 1450], 10: [1050, 700, 1400], 12: [1000, 650, 1350], E: 1.6e6, Emin: 580000 },
+ No2: { 4: [1100, 675, 1450], 6: [1000, 600, 1400], 8: [925, 550, 1350], 10: [800, 500, 1300], 12: [750, 475, 1250], E: 1.4e6, Emin: 510000 } };
+function timberVals(sp, gr, sz, wet) {
+ const [nb, nd] = sz.split('x').map(Number), [b, d] = TIMBER[sz];
+ let r;
+ if (nb <= 4) { // dimension lumber
+  if (sp === 'SYP') { const g = DIM4_SYP[gr], v = g[nd]; r = { Fb: v[0], Ft: v[1], Fc: v[2], E: g.E, Emin: g.Emin, CFb: nd >= 8 ? 1.1 : 1, CFt: 1, CFc: 1 }; }
+  else { const v = DIM4_DF[gr], c = CF4_DF[nd]; r = { ...v, CFb: c[0], CFt: c[1], CFc: c[2] }; }
+  r.cat = 'Dimension lumber (2"–4" thick)'; r.tbl = sp === 'SYP' ? 'Table 4B' : 'Table 4A';
+  // wet service, Tables 4A/4B: Fb 0.85 (if Fb·CF > 1150), Ft 1.0, Fc 0.8 (if Fc·CF > 750), E/Emin 0.9
+  r.CM = wet ? { Fb: r.Fb * r.CFb > 1150 ? 0.85 : 1, Ft: 1, Fc: r.Fc * r.CFc > 750 ? 0.8 : 1, E: 0.9 } : { Fb: 1, Ft: 1, Fc: 1, E: 1 };
+ } else { // timbers 5x5 and larger
+  const cls = nd - nb > 2 ? 'BS' : 'PT', v = NDS_TIMB[sp][cls][gr];
+  r = { ...v, CFb: d > 12 ? (12 / d) ** (1 / 9) : 1, CFt: 1, CFc: 1, cat: cls === 'BS' ? 'Beams & Stringers' : 'Posts & Timbers', tbl: 'Table 4D' };
+  // Table 4D wet service: Fb 1.0, Ft 1.0, Fc 0.91, E 1.0. Southern Pine timber values are already wet-service values (C_M = 1).
+  r.CM = wet && sp !== 'SYP' ? { Fb: 1, Ft: 1, Fc: 0.91, E: 1 } : { Fb: 1, Ft: 1, Fc: 1, E: 1 };
+ }
+ return { ...r, b, d, sz, G: NDS_TIMB[sp].G };
+}
+// NDS 2018 §12.3.1 yield limit equations, double shear, load parallel to grain (θ = 0)
+function boltZ(D, type, bw, ts, G) {
+ const Fw = 11200 * G, Fst = 87000, Fyb = 45000; // Fe‖ wood; steel 1.5·Fu (A36, Fu 58 ksi); bolt Fyb
+ let tm, Fem, ls, Fes;
+ if (type === 'knife') { tm = ts; Fem = Fst; ls = (bw - ts - 1 / 16) / 2; Fes = Fw; } else { tm = bw; Fem = Fw; ls = ts; Fes = Fst; }
+ if (ls <= 0) return { Z: 0, mode: 'kerf > member' };
+ const Re = Fem / Fes, k3 = -1 + Math.sqrt(2 * (1 + Re) / Re + 2 * Fyb * (2 + Re) * D * D / (3 * Fem * ls * ls));
+ const modes = { Im: D * tm * Fem / 4, Is: 2 * D * ls * Fes / 4, IIIs: 2 * k3 * D * ls * Fem / ((2 + Re) * 3.2), IV: 2 * D * D / 3.2 * Math.sqrt(2 * Fem * Fyb / (3 * (1 + Re))) };
+ let mode = 'Im'; Object.keys(modes).forEach(k => { if (modes[k] < modes[mode]) mode = k; });
+ return { Z: modes[mode], mode, modes, ls, tm };
+}
+const cPf = (Fe, Fs, c) => { const r = Fe / Fs; return (1 + r) / (2 * c) - Math.sqrt(((1 + r) / (2 * c)) ** 2 - r / c); };
+// combined axial + bending, NDS §3.9. N (+T/−C) lb, M ft-lb, le1 in-plane (about d), le2 out-of-plane (about b), lu bending unbraced (in)
+function timberMember(rv, N, M, le1, le2, lu, CD) {
+ const { b, d } = rv, A = b * d, Sx = b * d * d / 6, Emin = rv.Emin * rv.CM.E;
+ const fb = M * 12 / Sx, Fbs = rv.Fb * CD * rv.CM.Fb * rv.CFb;
+ let CL = 1; if (lu > 0 && d > b && fb > 0) { const le = lu / d < 7 ? 2.06 * lu : lu / d <= 14.3 ? 1.63 * lu + 3 * d : 1.84 * lu, RB = Math.sqrt(le * d / (b * b)), FbE = 1.2 * Emin / RB ** 2, r = FbE / Fbs; CL = (1 + r) / 1.9 - Math.sqrt(((1 + r) / 1.9) ** 2 - r / 0.95); }
+ const Fbp = Fbs * CL, sl1 = le1 / d, sl2 = le2 / b, slmax = Math.max(sl1, sl2);
+ if (N >= 0) { const ft = N / A, Ftp = rv.Ft * CD * rv.CM.Ft * rv.CFt, r1 = ft / Ftp + fb / Fbs, r2 = fb > ft ? (fb - ft) / Fbp : 0;
+  return { ratio: Math.max(r1, r2), fa: ft, Fa: Ftp, fb, Fbp, CL, sl: slmax, desc: `f<sub>t</sub> ${ft.toFixed(0)}/${Ftp.toFixed(0)}, f<sub>b</sub> ${fb.toFixed(0)}/${Fbp.toFixed(0)} psi (C<sub>L</sub> ${CL.toFixed(2)}) Eq. 3.9-1/2` }; }
+ const fc = -N / A, Fcs = rv.Fc * CD * rv.CM.Fc * rv.CFc, FcE1 = 0.822 * Emin / sl1 ** 2, FcE2 = 0.822 * Emin / sl2 ** 2, Fcp = Fcs * cPf(Math.min(FcE1, FcE2), Fcs, 0.8);
+ const ratio = fc >= FcE1 || slmax > 50 ? Infinity : (fc / Fcp) ** 2 + fb / (Fbp * (1 - fc / FcE1));
+ return { ratio, fa: fc, Fa: Fcp, fb, Fbp, CL, sl: slmax, desc: `f<sub>c</sub> ${fc.toFixed(0)}/${Fcp.toFixed(0)}, f<sub>b</sub> ${fb.toFixed(0)}/${Fbp.toFixed(0)} psi, l<sub>e</sub>/d max ${slmax.toFixed(1)}${slmax > 50 ? ' <b>&gt; 50</b>' : ''} Eq. 3.9-3` };
+}
+function calcArch() {
+ const msgs = [], pat = $('archPat').value;
+ const S = toFt(+$('span').value, $('spanU').value), L = toFt(+$('blen').value, $('blenU').value), ov = toFt(+$('ovh').value, $('ovhU').value);
+ const p = pitchToSlope(+$('pitch').value), ang = Math.atan(p / 12);
+ $('pitchHint').textContent = angleMode ? `≈ ${p.toFixed(2)}/12` : `= ${(ang * 180 / Math.PI).toFixed(2)}° • rise per 12" of run`;
+ const sp = +$('archSp').value;
+ if (!(S > 0 && L > 0 && p > 0 && sp > 0)) { $('msgs').innerHTML = '<div class="err">Enter a positive span, length, pitch and truss spacing.</div>'; return; }
+ const wet = $('archWet').checked, spc = $('archSpecies').value, gr = $('archGrade').value;
+ const sz = { TC: $('archTC').value, BC: $('archBC').value, W: $('archWeb').value }, RV = {}; Object.entries(sz).forEach(([k, v]) => RV[k] = timberVals(spc, gr, v, wet));
+ if (sp < 4 || sp > 12) msgs.push(['warn', `Truss spacing ${sp} ft is outside the typical 4–12 ft range for exposed heavy-timber patio trusses.`]);
+ const g = geometry(pat, S, p, 0, 0);
+ const lr = +$('lr').value, sn = +$('snow').value, tcdl = +$('tcdl').value, bcdl = +$('bcdl').value, LL = Math.max(lr, sn), gName = LL === sn && sn > lr ? 'D+S' : 'D+Lr';
+ const V = +$('vwind').value; if ($('windAuto').checked) { $('wind').value = windAutoPsf(V, $('expo').value).toFixed(1); $('wind').readOnly = true; } else $('wind').readOnly = false;
+ const W = +$('wind').value, CDg = +$('cd').value, CDw = 1.6;
+ // self weight: 35 pcf dry / 40 pcf wet; TC per horizontal ft, BC + webs spread on BC
+ const dens = wet ? 40 : 35, wA = k => RV[k].b * RV[k].d / 144 * dens;
+ const webLen = g.m.filter(m => m[2] === 'W').reduce((a, m) => a + Math.hypot(g.n[m[0]].x - g.n[m[1]].x, g.n[m[0]].y - g.n[m[1]].y), 0);
+ const swTC = wA('TC') / Math.cos(ang), swBC = wA('BC') + wA('W') * webLen / S;
+ const wtG = (tcdl + LL) * sp + swTC, wbG = bcdl * sp + swBC, wtW = 0.6 * (tcdl * sp + swTC) - 0.6 * W * sp, wbW = 0.6 * (bcdl * sp + swBC);
+ const pkD = +$('archPkD').value, pkL = +$('archPkL').value, pkA = +$('archPkA').value;
+ const model = buildModel(g, S, ov, ang, pat), pk = model.nodes.findIndex(n => n.keys.includes('P'));
+ const pts = { G: pkD + pkL ? [[pk, -(pkD + pkL)]] : [], W: pkD || pkA ? [[pk, -0.6 * pkD + 0.6 * W * pkA]] : [] };
+ const prop = k => ({ A: RV[k].b * RV[k].d, I: RV[k].b * RV[k].d ** 3 / 12 }), E = RV.TC.E * RV.TC.CM.E;
+ jointOutput(model, { E, chord: prop('TC'), bchord: prop('BC'), web: prop('W'), arch: true }, wtG, wbG, wtW, wbW, gName, null, pts);
+ const o = window._truss; if (!o || !o.G) return;
+ // member checks
+ const purl = +$('archPurl').value, bcBr = +$('archBcBr').value;
+ const chk = [], conn = []; let maxR = 0, maxLab = '';
+ const bolt = boltZ(+$('archBoltD').value, $('archConn').value, 0, +$('archPlateT').value, RV.TC.G), nB = Math.max(1, Math.round(+$('archBolts').value)), CMd = wet ? 0.7 : 1;
+ o.G.els.forEach((e, q) => {
+  const ty = e.m.ty === 'TC' ? 'TC' : e.m.ty === 'BC' ? 'BC' : 'W', rv = RV[ty], A = model.nodes[e.m.i], B = model.nodes[e.m.j], dx = Math.abs(B.x - A.x), Lin = e.Lft * 12;
+  const cases = [[gName, e, CDg, ty === 'TC' ? wtG : ty === 'BC' ? wbG : 0], ['0.6D+0.6W', o.Wd.els[q], CDw, ty === 'TC' ? wtW : ty === 'BC' ? wbW : 0]];
+  let worst = null;
+  cases.forEach(([cn, el, CD, w]) => {
+   const Mw = Math.abs(w) * dx * dx, M = ty === 'W' ? 0 : Math.max(Mw / 8, el.M + Mw / 12);
+   // TC: purlins brace the top edge (gravity compression edge) & weak axis; under uplift the bottom edge is in compression → l_u = panel
+   const le2 = ty === 'TC' ? (purl > 0 ? Math.min(purl, Lin) : Lin) : ty === 'BC' ? (bcBr > 0 ? Math.min(bcBr * 12, Lin) : S * 12) : Lin;
+   const lu = ty === 'TC' ? (cn === '0.6D+0.6W' || !(purl > 0) ? Lin : Math.min(purl, Lin)) : ty === 'BC' ? (bcBr > 0 ? bcBr * 12 : S * 12) : Lin;
+   const r = timberMember(rv, el.N, M, Lin, le2, lu, CD);
+   if (!worst || r.ratio > worst.r.ratio) worst = { r, cn, N: el.N, M };
+  });
+  chk.push({ lab: e.m.lab, ty, sz: rv.sz, ...worst }); if (worst.r.ratio > maxR) { maxR = worst.r.ratio; maxLab = e.m.lab; }
+  // connection: each member end bolted to plate; load parallel to member grain
+  const bz = boltZ(+$('archBoltD').value, $('archConn').value, rv.b, +$('archPlateT').value, rv.G);
+  const rg = Math.abs(e.N) / (nB * bz.Z * CDg * CMd), rw = Math.abs(o.Wd.els[q].N) / (nB * bz.Z * CDw * CMd);
+  conn.push({ lab: e.m.lab, sz: rv.sz, Ng: e.N, Nw: o.Wd.els[q].N, bz, ratio: Math.max(rg, rw), gov: rg >= rw ? gName : 'wind' });
+ });
+ // results
+ const cls = r => r <= 1 ? 'ok' : 'fail', tag = r => r <= 1 ? 'OK' : 'NG', pct = r => isFinite(r) ? (r * 100).toFixed(0) + '%' : '∞';
+ const Rg = o.G.R[o.G.ia * 3 + 1], Rw = o.Wd.R[o.Wd.ia * 3 + 1], Rg2 = o.G.R[o.G.ie * 3 + 1], Rw2 = o.Wd.R[o.Wd.ie * 3 + 1], thrust = Math.abs(o.GP.R[o.GP.ia * 3]);
+ const rows = g.m.map(([a, b2, ty, lab]) => ({ ty, lab, len: Math.hypot(g.n[a].x - g.n[b2].x, g.n[a].y - g.n[b2].y) }));
+ const ovSlope = ov / Math.cos(ang); rows.forEach(r => { if (r.ty === 'TC') { r.len0 = r.len; r.len += ovSlope; } });
+ const nomBF = s2 => { const [a, c] = s2.split('x').map(Number); return a * c / 12; };
+ let bf = 0; rows.forEach(r => bf += r.len * nomBF(sz[r.ty === 'TC' ? 'TC' : r.ty === 'BC' ? 'BC' : 'W']));
+ const count = Math.floor(L / sp + 1e-6) + 1, peakH = g.peakTop, rise = p / 12 * S / 2;
+ const cards = [], cardAdd = (k, v) => cards.push(`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`);
+ cardAdd('Roof height (bearing to peak)', `${f2(peakH)} ft`); cardAdd('Roof angle', `${(ang * 180 / Math.PI).toFixed(2)}° <span style="font-size:.7em">(${p.toFixed(2)}/12)</span>`);
+ cardAdd('Truss count', `${count} trusses @ ${sp} ft`); cardAdd('Timber per truss', `${bf.toFixed(1)} bd ft`);
+ cardAdd('Bearing reaction / truss', `${Math.max(Rg, Rg2).toFixed(0)} lb (${gName})`); cardAdd('Net uplift / bearing', Math.min(Rw, Rw2) < 0 ? `${(-Math.min(Rw, Rw2)).toFixed(0)} lb ↑` : 'none');
+ cardAdd('Heel thrust (both bearings pinned)', `${thrust.toFixed(0)} lb`); cardAdd('Max member ratio', `<span style="color:${maxR <= 1 ? '#2e7d32' : '#c62828'}">${pct(maxR)}</span> <span style="font-size:.7em">${maxLab}</span>`);
+ const maxC = Math.max(...conn.map(c => c.ratio)); cardAdd('Max bolt group ratio', `<span style="color:${maxC <= 1 ? '#2e7d32' : '#c62828'}">${pct(maxC)}</span>`);
+ cardAdd('Self weight (TC / BC+webs)', `${swTC.toFixed(1)} / ${swBC.toFixed(1)} plf`);
+ $('cards').innerHTML = cards.join('');
+ if (maxR > 1) msgs.push(['err', `<b>Member NG:</b> ${maxLab} at ${pct(maxR)} – increase size/grade, add webs, or reduce spacing.`]);
+ if (maxC > 1) msgs.push(['err', `<b>Connection NG (bolt group):</b> max ${pct(maxC)} – add bolts, larger bolts or thicker plates (engineer to detail).`]);
+ if (pat === 'king' && S > 20) msgs.push(['warn', 'King post trusses over ~20 ft span get long unbraced top chord panels – consider king post + struts or queen post.']);
+ if (pkD + pkL > 0) msgs.push(['warn', `Peak point load ${(pkD + pkL).toFixed(0)} lb (${gName}) applied at the peak; wind case ${pts.W.length ? (pts.W[0][1] >= 0 ? (pts.W[0][1]).toFixed(0) + ' lb uplift' : (-pts.W[0][1]).toFixed(0) + ' lb down') : '0'} – provide a rated tie for the beam to the truss.`]);
+ $('msgs').innerHTML = msgs.map(([c, s2]) => `<div class="${c}">${s2}</div>`).join('');
+ $('members').innerHTML = '<tr><th>Member</th><th>Type</th><th>Size</th><th>Length (ft)</th><th>ft-in</th></tr>' + rows.map(r => { const k = r.ty === 'TC' ? 'TC' : r.ty === 'BC' ? 'BC' : 'W';
+  return `<tr><td style="text-align:left">${r.lab}${r.len0 !== undefined ? ' <i>(incl. ' + f2(ovSlope) + ' ft ovh)</i>' : ''}</td><td>${r.ty}</td><td>${sz[k].replace('x', '×')}</td><td>${f2(r.len)}</td><td>${ftin(r.len)}</td></tr>`; }).join('') +
+  `<tr><td colspan="3" style="text-align:right"><b>Board feet per truss (nominal)</b></td><td colspan="2"><b>${bf.toFixed(1)}</b></td></tr>`;
+ const vrow = k => { const r = RV[k]; return `<tr><td>${k === 'W' ? 'Webs' : k} ${r.sz.replace('x', '×')} (${r.b}×${r.d} in)</td><td>${r.cat}, ${r.tbl}</td><td>F<sub>b</sub> ${r.Fb}, F<sub>t</sub> ${r.Ft}, F<sub>c</sub> ${r.Fc}, E ${(r.E / 1e6).toFixed(1)}M, E<sub>min</sub> ${r.Emin}; C<sub>F</sub> ${r.CFb.toFixed(3)}/${r.CFt}/${r.CFc} (b/t/c); C<sub>M</sub> ${r.CM.Fb}/${r.CM.Ft}/${r.CM.Fc}/${r.CM.E} (b/t/c/E)</td></tr>`; };
+ $('check').innerHTML = `<table><tr><th>Timber</th><th>NDS category</th><th>Reference values (psi) &amp; factors</th></tr>${vrow('TC')}${vrow('BC')}${vrow('W')}
+ <tr><td colspan="3" style="text-align:left;font-size:.85em">${spc === 'SYP' ? 'Southern Pine' : 'DF-L'} ${gr.replace('No', 'No. ')}, ${wet ? '<b>exposed / wet service</b>' : 'dry service'}; C<sub>r</sub> = 1.0 (spacing &gt; 24″), C<sub>t</sub> = 1.0, C<sub>i</sub> = 1.0 (untreated – apply C<sub>i</sub> if incised), C<sub>D</sub> = ${CDg} (${gName}) / 1.6 (wind). In-plane l<sub>e</sub> = panel length (K<sub>e</sub> = 1.0); TC out-of-plane &amp; l<sub>u</sub> = purlins @ ${purl}″ (l<sub>u</sub> = panel under uplift); BC out-of-plane ${bcBr > 0 ? bcBr + ' ft' : 'full span'}.</td></tr></table>
+ <table><tr><th>Member</th><th>Size</th><th>Governing case</th><th>N (lb)</th><th>M (ft-lb)</th><th>NDS check</th><th>Ratio</th></tr>${chk.map(c => `<tr class="${cls(c.r.ratio)}"><td>${c.lab}</td><td>${c.sz.replace('x', '×')}</td><td>${c.cn}</td><td>${(c.N >= 0 ? '+' : '−') + Math.abs(c.N).toFixed(0)}</td><td>${c.M.toFixed(0)}</td><td style="font-size:.8em">${c.r.desc}</td><td><b>${pct(c.r.ratio)} ${tag(c.r.ratio)}</b></td></tr>`).join('')}</table>
+ <h3 style="font-size:1em;color:#0066cc">Connections – ${$('archConn').value === 'knife' ? 'knife plate (steel in kerf)' : 'steel side plates'}, ${nB} × ${$('archBoltD').selectedOptions[0].text} bolt(s) per member end, ${$('archPlateT').value}″ plate</h3>
+ <table id="archConnTbl"><tr><th>Member end</th><th>Force ${gName} / wind (lb)</th><th>Z per bolt (mode)</th><th>Group Z′ ${gName} / wind</th><th>Ratio</th></tr>${conn.map(c => { const zg = nB * c.bz.Z * CDg * CMd, zw = nB * c.bz.Z * CDw * CMd;
+  return `<tr class="${cls(c.ratio)}"><td>${c.lab} (${c.sz.replace('x', '×')})</td><td>${Math.abs(c.Ng).toFixed(0)} / ${Math.abs(c.Nw).toFixed(0)}</td><td>${c.bz.Z.toFixed(0)} lb (${c.bz.mode})</td><td>${zg.toFixed(0)} / ${zw.toFixed(0)}</td><td><b>${pct(c.ratio)} ${tag(c.ratio)}</b> (${c.gov})</td></tr>`; }).join('')}</table>
+ <div class="warn"><b>Connections are by the Engineer of Record</b> (bolted steel side plates or knife plates). Simple check only: NDS 2018 §12.3 yield limit equations, double shear, load parallel to grain, G = ${RV.TC.G}, F<sub>yb</sub> 45 ksi, A36 plate, C<sub>M</sub> = ${CMd} ${wet ? '(wet service)' : ''}, C<sub>g</sub> = C<sub>Δ</sub> = 1.0 (assumes full NDS end/edge distance &amp; spacing: end 7D, spacing 4D). <b>Not checked:</b> row/group tear-out (Appendix E), net section, steel plate design, plate-to-plate welds, heel bearing perpendicular to grain, moisture-shrinkage at multi-row bolts in wet timbers. Exposed hardware: hot-dip galvanized or stainless.</div>
+ <div class="hint"><b>Preliminary</b> – frame model (chords continuous, webs pinned); chord moment = max(wL²/8, frame end moment + wL²/12). Final timber truss &amp; connection design by the Engineer of Record / fabricator.</div>`;
+ const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+ $('crit').innerHTML = `<div class="k">Site / Design Criteria</div><div style="font-size:.9em"><b>Address:</b> ${esc($('addr').value) || '—'}<br><b>Risk Category:</b> ${$('riskCat').value} &nbsp; <b>Exposure:</b> ${$('expo').value} (K<sub>z</sub>=${KZ[$('expo').value]}) &nbsp; <b>V:</b> ${V} mph &nbsp; <b>Snow:</b> ${sn} psf<br><i>Source: ASCE Hazard Tool (ASCE 7-22), entered manually. Open patio: verify wind with ASCE 7-22 open-building / canopy provisions.</i></div>`;
+ $('bracing').innerHTML = `<ul style="margin:4px 0 4px 18px;padding:0;font-size:.9em">
+ <li><b>Top chord:</b> lateral bracing by purlins @ ${purl}″ o.c. spanning ${sp} ft between trusses; fasten each purlin to every truss top chord (engineer to specify fastener/clip). Purlins act as l<sub>u</sub> and weak-axis brace for the TC.</li>
+ <li><b>Diagonal / roof bracing:</b> provide a roof diaphragm (decking) or diagonal bracing in the purlin plane so purlins cannot translate together; brace back to a rigid end wall or post/knee-brace frame.</li>
+ <li><b>Bottom chord:</b> ${bcBr > 0 ? `braced out-of-plane @ ${bcBr} ft (ties/struts to diaphragm)` : 'unbraced over the full span (typical exposed patio) – wind reversal compression checked with l<sub>e</sub> = span'}.</li>
+ <li><b>Posts:</b> exposed truss on posts – lateral stability by knee braces, moment connections or attachment to the house; not checked here.</li></ul>`;
+ drawSVG(g, S, ov, ang, pat, model, { purl: true, lu: purl, clr: bcBr > 0, clrSp: bcBr, webs: [], bcLab: bcBr > 0 ? `BC braced @ ${bcBr} ft` : 'BC unbraced (open patio)' });
+ $('pProj').textContent = $('proj').value || '—'; $('pDate').textContent = new Date().toLocaleDateString();
+ window._arch = { chk, conn, maxR, maxLab, maxC, Rg, Rw, thrust, RV, bolt, swTC, swBC };
+}
 function windAutoPsf(V, ex) { const qh = 0.00256 * KZ[ex] * 1.0 * 0.85 * V * V; return qh * 1.18; }
 
 function calculate() {
@@ -376,6 +559,9 @@ function calculate() {
  const t = $('ttype').value;
  $('scissorBox').style.display = t === 'scissor' ? 'block' : 'none';
  $('atticBox').style.display = t === 'attic' ? 'block' : 'none';
+ $('archBox').style.display = t === 'arch' ? 'block' : 'none';
+ document.querySelectorAll('.stdOnly').forEach(e => e.style.display = t === 'arch' ? 'none' : '');
+ if (t === 'arch') { $('pitchLbl').textContent = 'Roof Pitch'; return calcArch(); }
  $('pitchLbl').textContent = t === 'scissor' ? 'Top Chord Pitch' : 'Roof Pitch';
  const S = toFt(+$('span').value, $('spanU').value), L = toFt(+$('blen').value, $('blenU').value), ov = toFt(+$('ovh').value, $('ovhU').value);
  const p = pitchToSlope(+$('pitch').value), q = t === 'scissor' ? +$('bpitch').value : 0, heel = +$('heel').value / 12;
@@ -535,7 +721,7 @@ function drawSVG(g, S, ov, ang, t, model, br) {
    const x1 = X(A.x), y1 = Y(A.y), x2 = X(B.x), y2 = Y(B.y), L = Math.hypot(x2 - x1, y2 - y1); if (L < 1) return; const nx = (y2 - y1) / L, ny = -(x2 - x1) / L;
    const sg = m.ty === 'TC' ? (ny < 0 ? 1 : -1) : (ny > 0 ? 1 : -1); const col = m.ty === 'TC' ? '#e65100' : '#00838f';
    if ((m.ty === 'TC' && br.purl) || (m.ty === 'BC' && br.clr)) s += `<line x1="${x1 + sg * nx * off}" y1="${y1 + sg * ny * off}" x2="${x2 + sg * nx * off}" y2="${y2 + sg * ny * off}" stroke="${col}" stroke-dasharray="5 3" stroke-width="1.3"/>`; });
-  const tcLab = br.purl ? `Purlins @ ${br.lu}″ o.c.` : 'TC braced: structural sheathing', bcLab = br.clr ? `BC: 2×4 CLR @ ${br.clrSp} ft o.c.` : 'BC braced: rigid gyp. ceiling';
+  const tcLab = br.purl ? `Purlins @ ${br.lu}″ o.c.` : 'TC braced: structural sheathing', bcLab = br.bcLab || (br.clr ? `BC: 2×4 CLR @ ${br.clrSp} ft o.c.` : 'BC braced: rigid gyp. ceiling');
   s += `<text x="${W - 8}" y="14" text-anchor="end" font-size="10" fill="#e65100">${tcLab}</text><text x="${W - 8}" y="27" text-anchor="end" font-size="10" fill="#00838f">${bcLab}</text>`;
   br.webs.filter(w => w.need).forEach(w => { const A = model.nodes[w.m.i], B = model.nodes[w.m.j], cx = X((A.x + B.x) / 2), cy = Y((A.y + B.y) / 2);
    s += `<rect x="${cx - 5}" y="${cy - 5}" width="10" height="10" fill="#fff3e0" stroke="#c62828"/><path d="M${cx - 5},${cy - 5}L${cx + 5},${cy + 5}M${cx + 5},${cy - 5}L${cx - 5},${cy + 5}" stroke="#c62828"/><text x="${cx + 7}" y="${cy + 3}" font-size="9" fill="#c62828" font-weight="bold">${w.tb ? 'T-BRACE' : 'CLR'}*</text>`; });
@@ -581,7 +767,7 @@ function importText(txt, fname) { try { setState(JSON.parse(txt)); msg(`Imported
 $('importFile').onchange = e => { const f = e.target.files[0]; if (!f) return; f.text().then(t => importText(t, f.name)); e.target.value = ''; };
 const autosave = () => { try { localStorage.setItem(LS_AUTO, JSON.stringify(getState())); } catch (e) {} };
 document.querySelectorAll('#inputs input, #inputs select').forEach(e => { if (e.id !== 'importFile' && e.id !== 'loadSel') { e.addEventListener('input', autosave); e.addEventListener('change', autosave); } });
-['tRatio', 'tAngle', 'reset', 'calc'].forEach(k => $(k).addEventListener('click', () => setTimeout(autosave, 0)));
+['tRatio', 'tAngle', 'reset', 'calc', 'loadBtn'].forEach(k => $(k).addEventListener('click', () => setTimeout(autosave, 0)));
 refreshList();
 try { const a = JSON.parse(localStorage.getItem(LS_AUTO)); if (a && !location.search) setState(a); } catch (e) {}
 { const up = new URLSearchParams(location.search);
